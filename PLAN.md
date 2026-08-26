@@ -191,12 +191,152 @@ support. Report `total_weight`, `max_weight`, `avg_weight`, `n_qubits`.
 **`score_paper(spec, mapping, terms)`** — the convention of arXiv 2504.21636
 §III-C, used only for Table I calibration.
 
-> ⚠ **Do not reconstruct their cost model from the paper prose.** An attempt to
-> do so yields `total = 4·Σd + 8·|E| + M` for Jordan–Wigner, which requires
-> `Σd = 33` to reproduce their 3×3 value of 237 — but plain row-major ordering
-> already gives `Σd = 24`, and they are *minimizing*. The reconstruction is
-> wrong somewhere. Use their released code as the reference implementation:
-> `github.com/cameton/QCE_QubitAssignment`.
+> **Status update, after the eq. 10/36 investigation below: this may not
+> need to be a separate function.** `score_majorana` + `hamiltonian(...,
+> model="full")` already compute the paper's exact `Num+ReHop+ImHop+Inter`
+> convention, verified two independent ways (exhaustive search, closed-form
+> arithmetic) against their own published equations — see the long note in
+> §1.7 Test 4. `score_paper` would only earn its own function if we find a
+> case where the two conventions genuinely diverge; so far, for JW, they
+> don't. Revisit if/when other encodings (BK, parity, TT) are added — the
+> JW-specific symmetry that made several groupings numerically equivalent
+> (all four raw hopping bilinears per edge equal) is **not** guaranteed to
+> hold for them.
+>
+> **A durable modeling rule worth remembering for those future encodings**:
+> this convention deliberately does **not** deduplicate identical Pauli
+> operators that arise from different physical term categories. E.g. the
+> single-qubit `Z`-type operator from a vertex's number term recurs, with
+> its own separate weight contribution, once inside every incident edge's
+> interaction-term expansion (`Inter_ij` literally re-adds `Num_i` and
+> `Num_j`). A vertex of degree `k` has that one operator counted `k+1`
+> times, not once. That's not a bug to fix — it's what "Total Pauli weight"
+> means here (a sum over Hamiltonian summands, not a minimal distinct-Pauli-
+> string count) — but it would be an easy thing to "fix" by accident while
+> implementing a new encoding's scoring, so don't.
+>
+> **Also worth remembering**: a single edge's hopping term is 2 terms at the
+> *fermionic operator* level (`c_ij A_i^dag A_j + h.c.`) but decomposes into
+> up to 4 distinct *Pauli-string* terms once `A_i = (gamma_i + i*gammabar_i)/2`
+> is substituted in and simplified with the Majorana anticommutation
+> relations (2 if `c_ij` is purely real or purely imaginary, 4 if genuinely
+> complex) — not a contradiction, just two different levels of description.
+> Number and interaction terms stay real-only, and need no such split: `A_i^dag
+> A_i` and `A_i^dag A_i A_j^dag A_j` are each already Hermitian on their own
+> (unlike `A_i^dag A_j` alone), so their coefficients are forced real by
+> Hermiticity, not by convenience.
+
+> ⚠ Do not reconstruct their cost model from the paper prose *as your only
+> check* — cross-verify against the actual LaTeX source or code. Use their
+> released code as an additional reference: `github.com/cameton/QCE_QubitAssignment`.
+>
+> **This note originally said `total = 4·Σd + 8·|E| + M` (Σd = sum of
+> linear-order edge separations) must be "wrong somewhere" because it needs
+> `Σd=33` for their 3×3 value of 237, while row-major gives `Σd=24`. That
+> premise was backwards.** The formula is correct — independently re-derived
+> from their own published equations, and it reproduces our code's actual
+> output exactly (`201, 448, 825, 4113` for `L=3,4,5,9`). Since Total is
+> strictly increasing in `Σd` for a fixed graph, minimizing Total is exactly
+> equivalent to minimizing `Σd` — and we've *exhaustively proven* (full `9!`
+> search, §1.7 investigation below) that `Σd=24` is the true global minimum
+> for the `3×3` grid. `Σd=33` is achievable by *some* ordering but is
+> provably not optimal. So `237` isn't a value the formula fails to reach —
+> it's a value that doesn't correspond to any achievable optimum, which is a
+> different and more specific claim than "the reconstruction is wrong."
+>
+> **Update, after actually inspecting `hexaly_quadratic_assignment.py`:** one
+> real bug was found and fixed by this — our own `hamiltonian(..., model=
+> "full")` was under-building the interaction term. `n_i n_j` expands to
+> *three* nontrivial Pauli terms (`G_i`, `G_j`, `G_i·G_j` with `G_i = gamma_i
+> gammabar_i`), not just the quartic product; we were only emitting the
+> quartic one. Confirmed against their `map_cost`'s `Rep` term, which is
+> literally `weight(F_r) + weight(F_c) + weight(F_r xor F_c)`. Fixed in
+> `harness/lattice.py`.
+>
+> **Second update, after pulling the arXiv LaTeX source directly (not the
+> paper prose, not their code — the actual published equations, Eq. right
+> before Table I):** `Num_i := ||F_i||_0`; `ReHop_ij := ||max(P_i+R_j,
+> U_i+U_j)||_0 + ||max(R_i+P_j, U_i+U_j)||_0`; `ImHop_ij` is the same with
+> `(P_i+P_j)` and `(R_i+R_j)`; `Inter_ij := ||F_i||_0 + ||F_j||_0 + ||F_i +
+> F_j||_0`; total = `(Σ_edges D_ij) + (Σ_vertices D_ii)` with `⊕ = +`. This
+> is *exactly* what we already had (confirms the interaction-term fix above,
+> and confirms `ReHop`/`ImHop` are literally the two real-part and two
+> imaginary-part Majorana bilinears per edge, summed). Note: their released
+> code's `Cre`/`Ciu` in `map_cost` do NOT match these published equations
+> (the code double-counts one bilinear and drops another) — but for JW
+> specifically this doesn't matter, because all four raw bilinear weights
+> per edge are numerically equal by a JW-specific symmetry, so both the
+> (buggy) code grouping and the (correct) paper grouping sum to the same
+> number. Don't assume that symmetry holds for BK/parity/ternary tree.
+>
+> Exhaustively re-searched all `9!` orderings (not just row-major) under the
+> verbatim formula above: **true global minimum is `total=201`, `max=4`,
+> Fermi–Hubbard=`120`**, achieved at row-major for every variant tried.
+> Paper reports `237` / `4` / `138`. Max matches exactly; total and
+> Fermi–Hubbard are each short by a consistent-feeling amount (`36`, `18`,
+> ratio 2) that survives every hypothesis tested and exhaustively
+> re-searched for its own true optimum, not just evaluated at row-major:
+> generic complex hopping coefficients (included, confirmed present in their
+> model — didn't close the gap), periodic boundary conditions (18 edges
+> instead of 12 — makes it worse, `345`, still row-major-optimal), and
+> optimizing for hopping-cost alone before evaluating the full total (lands
+> on the same row-major ordering, no change). Also checked both linked
+> Mathematica notebooks in their repo — both are about hexagonal/triangular
+> lattices, unrelated to the square-grid benchmark.
+>
+> **Third update — checked row-major against the FULL table, all 13 grid
+> sizes (`L=3..15`), not just `3×3`. This is close to conclusive.**
+>
+> Max Pauli weight: row-major exactly matches the published JW column for
+> **eight straight sizes, `L=3` through `L=8`** (`4,5,6,7,8,9`). From `L=9`
+> on, row-major's max is *lower* (better) than published — by `1,1,2,2,2,3,4`
+> as `L` goes `9..15`. A closed form explains why: row-major puts every
+> vertical hop exactly `L` apart in linear order, so its max weight is
+> provably `L+1` for any `L` — no search needed, and it matches published
+> values exactly wherever the true optimum apparently *is* `L+1` (small `L`),
+> then beats published values once their solver (30s time limit per
+> instance, from their own code) stops finding it (large `L`).
+>
+> Total Pauli weight: row-major beats the published JW column at **every one
+> of the 13 sizes**, gap growing from `-36` at `L=3` up to `-576` at `L=15`
+> — using the exact formula pulled from their LaTeX source (not a guess).
+> This is the more surprising one: at `L=3` (`9!` possibilities, trivial for
+> any solver) there's no plausible search-difficulty excuse, yet row-major
+> already beats their reported "optimized" number by `36`.
+>
+> **Reading of the evidence:** max weight is now about as validated as
+> possible short of literally running their solver — an exact analytic
+> formula, matching 8 independent published values, degrading exactly where
+> a time-limited heuristic would be expected to degrade. For total weight,
+> the likely explanation is that their own QAP optimization (`hexaly_qap` in
+> their released code) minimizes `B = Cre + Ciu` only — hopping cost alone,
+> literally excluding `Op` (Num) and `Rep` (Inter) from the search objective,
+> per `test_weights()` in `hexaly_quadratic_assignment.py` — then the paper
+> likely reports the full formula evaluated at whatever ordering that
+> incomplete objective converged to, not the ordering that truly minimizes
+> the full total. We tested this exact idea for `3×3` (finding the
+> hopping-only-optimal ordering, then evaluating the full formula there) and
+> it happened to land on row-major too for that one small case, so it didn't
+> move the number there — but for larger `L`, hopping-only-optimal and
+> jointly-optimal orderings need not coincide, which would explain a gap
+> that *grows* with `L` and is nonzero even at `L=3` if their solver's found
+> ordering for `L=3` wasn't literally row-major to begin with.
+>
+> **Conclusion for now: treat the published total-weight numbers as likely
+> reflecting their solver's search, not a provable global optimum** — our
+> own numbers (verified against their exact equations, and exhaustively
+> optimal at `3×3`) are the more trustworthy reference going forward. Max
+> weight is fully validated. Revisit only if their actual solver output
+> becomes available; don't keep reconstructing from prose or code.
+>
+> **Fourth update — the `ImHop` bilinears are now in `harness/lattice.py`
+> itself, not stranded in a scratch script.** eq. 10's hopping term
+> `c_ij A_i^dag A_j + c_ij^* A_j^dag A_i` genuinely needs a complex `c_ij` —
+> unlike `Num`/interaction, whose own single-term Hermiticity forces their
+> coefficients real, so those needed no split. `hamiltonian()`'s edge loop
+> now emits all four bilinears per edge (`ReHop`'s two, `ImHop`'s two); the
+> `3×3` total from `score_majorana` is now directly `201`/`4`, matching
+> every number in the investigation above, straight from committed code.
 
 Never combine metrics into a single product such as `N × weight`. It asserts an
 invented qubit-vs-weight exchange rate, and it would penalize the ancilla
@@ -226,9 +366,21 @@ The verifier must reject, gracefully and with informative output:
 **Test 3 — ordering sensitivity.**
 
 Jordan–Wigner on rectangular grids under `row_major`, `snake`, and `diagonal`.
-Max weight should track the ordering in the expected way — e.g. snake ordering
-on `Lx × Ly` makes vertical hops span roughly `Lx` positions, giving max weight
-about `Lx + 1`. Sanity check, not calibration.
+Max weight should track the ordering in a way we can predict analytically.
+Sanity check, not calibration.
+
+**Correction (found by direct computation, not derived in advance — see
+`harness/lattice.py`):** it is `row_major`, not `snake`, that gives every
+vertical hop weight exactly `Lx + 1`, provably: `index(x, y+1) - index(x, y)
+= Lx` for every site under row-major, so all vertical hops are equally
+separated in the linear order. Standard boustrophedon `snake` does *not*
+reduce max weight relative to row-major — it only removes the row-wrap
+horizontal jump. Interior vertical hops under snake range from weight 2 (at
+the column where the row reverses) up to weight `2·Lx` (at the column
+farthest from it), which is worse in the worst case than row-major's uniform
+`Lx + 1`. Whether snake still wins on *total* weight (many low-weight edges
+against row-major's uniformly medium ones) is a separate question, not yet
+checked.
 
 **Test 4 — Table I reproduction. This is the gate.**
 

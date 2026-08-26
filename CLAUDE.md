@@ -35,12 +35,34 @@ looking at anything else.
    Majoranas"**, not "anticommutes with an even number of them" — the latter
    is strictly weaker and passes invalid stabilizers (counterexample in
    PLAN.md §1.5).
-3. **Never reconstruct the paper's (2504.21636) cost model from prose.** Use
-   their released code as ground truth for Table I calibration.
+3. **Don't reconstruct the paper's (2504.21636) cost model from prose alone
+   — but their released code isn't automatically ground truth either.**
+   Their code's `Cre`/`Ciu` (in `map_cost`, `hexaly_quadratic_assignment.py`)
+   do not actually match their own published equations (verified against the
+   arXiv LaTeX source directly) — for JW this happens not to matter, because
+   a JW-specific symmetry makes the code's buggy grouping and the paper's
+   correct grouping sum to the same number, but don't assume that holds for
+   other encodings. When in doubt, pull the LaTeX source and read the actual
+   equations (PLAN.md §1.6/1.7 has the full derivation) rather than trusting
+   either the prose or the code alone.
 4. **Vectorize the commutation check** (`G @ Lambda @ G.T mod 2`). The O(M²)
    Python double loop is a real bottleneck once search starts.
 5. A 1D chain is a unit test, not a benchmark — Jordan–Wigner is already
    optimal there.
+6. **Total Pauli weight doesn't deduplicate identical Pauli strings across
+   term categories.** A vertex of degree `k` has its number-term operator
+   counted `k+1` times (once explicitly, once more inside each incident
+   edge's interaction-term expansion) — that's the metric's definition, not
+   a bug. Don't "fix" it when implementing scoring for a new encoding.
+7. **A single edge's hopping term is 2 terms at the fermionic-operator level
+   but up to 4 at the Pauli-string level** (2 if the hopping coefficient is
+   purely real or purely imaginary, 4 if genuinely complex) — substituting
+   `A_i = (gamma_i + i*gammabar_i)/2` turns each of the 2 operator-level
+   terms into a 2-term sum, and combining them via the Majorana
+   anticommutation relations collapses the naive 4+4=8 back down to 4, not
+   8. Number and interaction terms stay real-only and need no such split —
+   `A_i^dag A_i` and `A_i^dag A_i A_j^dag A_j` are each Hermitian on their
+   own, so Hermiticity forces their coefficients real.
 
 ## Submission shape (Stage 2+)
 

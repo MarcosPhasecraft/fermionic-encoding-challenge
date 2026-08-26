@@ -84,8 +84,13 @@ Two standard cost functions, which do **not** agree:
    Corresponds to the non-locality of the Hamiltonian, and is the relevant
    time-complexity parameter for simulation algorithms.
 
-A third variant appears in the literature: total weight for a model with
-real coefficients and no interaction terms, corresponding to Fermi–Hubbard.
+A third variant appears in the literature: Fermi–Hubbard total weight,
+`D = ReHop + Inter` (arXiv 2504.21636 eq. after 36) — real-coefficient
+hopping *plus* the interaction term, excluding both the number term (`Num`)
+and the imaginary-coefficient hopping piece (`ImHop`). (An earlier version
+of this doc said "no interaction terms," which was backwards — the
+interaction term is exactly what's included; verified directly against the
+paper's LaTeX source, not the prose description, which is ambiguous here.)
 
 The **mode ordering** is a free choice — physically irrelevant, but it changes
 the Pauli weights substantially. Reordering is itself a special case of a
