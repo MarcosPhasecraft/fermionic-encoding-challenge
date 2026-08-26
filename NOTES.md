@@ -158,3 +158,38 @@ Stage 1, not held for Stage 2 — nothing about it requires an untrusted
 chain hand-rolled inline in ad hoc scripts. `tests/test_evaluate.py`
 confirms it reproduces the verified JW numbers and gates scoring on a
 failed `verify()`.
+
+## Second baseline: parity basis (`baselines/parity.py`)
+
+Built via `harness/constructors.py`'s `from_linear_encoding(U)` — also
+built ahead of Stage 2, since BK and ternary tree will need the same
+general constructor with a different `U`. `U_parity` is lower-triangular
+ones including the diagonal (the paper's own code names this `pb`, for
+"parity basis" — same matrix, confirmed by feeding `from_linear_encoding`
+the identity matrix and requiring it reproduce `baselines/jw.py`'s
+hand-written mapping character-for-character, which only holds if the
+`L` used internally (in `R = L @ F`, `P = R + F`) includes the diagonal —
+PLAN.md's original eq. 18 note said "L strictly lower-triangular," which
+this disproves).
+
+The resulting structure is the expected JW dual: mode `i`'s X-support is
+the shrinking suffix `{i,...,M-1}` (vs. JW's growing prefix `{0,...,i}`),
+which pushes weight out of `Num` and into an X-string hopping term instead
+of JW's Z-string.
+
+**Not yet exhaustively optimized** — unlike JW, we have not searched for
+parity's true-optimal ordering. Row-major, snake, and diagonal on the 3×3
+grid give:
+
+| ordering | total | max |
+|---|---|---|
+| row_major | 237 | 5 |
+| snake | 233 | 7 |
+| diagonal | 253 | 5 |
+
+Snake beats row-major on total but loses badly on max — a real
+metric-disagreeing tradeoff for this encoding, unlike JW where row-major
+happened to win on both. (The `237` matching JW's *published* total is very
+likely coincidence — different encoding, no mechanism connects them — not
+a finding to lean on.) Finding parity's actual optimum is open work for a
+future session, not something to assume row-major solves here.

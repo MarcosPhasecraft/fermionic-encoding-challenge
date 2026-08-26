@@ -14,6 +14,12 @@ import numpy as np
 
 # Phase is dropped -- commutation doesn't depend on it.
 _CHAR_TO_XZ = {"I": (0, 0), "X": (1, 0), "Y": (1, 1), "Z": (0, 1)}
+_XZ_TO_CHAR = {v: k for k, v in _CHAR_TO_XZ.items()}
+
+
+def xz_to_string(x: np.ndarray, z: np.ndarray) -> str:
+    """Inverse of string_to_xz: (x, z) bit vectors -> a Pauli string."""
+    return "".join(_XZ_TO_CHAR[(int(xi), int(zi))] for xi, zi in zip(x, z))
 
 
 def string_to_xz(pauli: str) -> tuple[np.ndarray, np.ndarray]:

@@ -312,12 +312,19 @@ through the unchanged pipeline and matches the known ternary-tree scores.
 
 ### Frozen helpers — `harness/constructors.py`
 
+**Built already**, ahead of Stage 2 — see `NOTES.md` for why (same reasoning
+as `evaluate.py`) and for the parity-basis baseline that uses it.
+
 Importable by `solution/`, so the generator can work in a convenient
 parameterization and hand back canonical form:
 
 - `from_linear_encoding(U)` — `U` invertible over `F_2`.
   `gamma_i -> X_{U(i)} Z_{P(i)}`, `gamma-bar_i -> X_{U(i)} Z_{R(i)}`, where
-  `F = U^-1`, `P = LF` (`L` strictly lower-triangular ones), `R = P + F`.
+  `F = U^-1`, `R = LF` (`L` lower-triangular ones **including** the
+  diagonal), `P = R + F`. (Corrected from an earlier draft of this note
+  that had `L` strictly below the diagonal and `P`/`R` computed in the
+  opposite order — disproven by requiring `from_linear_encoding(I)` to
+  reproduce `baselines/jw.py` exactly; see `tests/test_constructors.py`.)
   Reference: arXiv 2504.21636 eq. (18).
 - `from_ternary_tree(tree)` — Pauli labels along root-to-leaf paths.
 - `apply_clifford(mapping, ops)` — Clifford conjugation preserves the Majorana
@@ -346,10 +353,11 @@ encoding-bench/
     verify.py             the five checks
     score.py              score_majorana (score_paper judged unnecessary, see NOTES.md)
     evaluate.py           encode_fn -> verify -> score combinator (built ahead of Stage 2)
-    constructors.py       Stage 2 helpers
+    constructors.py       from_linear_encoding() etc (built ahead of Stage 2)
   baselines/              FROZEN
-    __init__.py           BASELINES = {"jw": jw.encode, ...} registry, by name
-    jw.py  parity.py  bk.py  ternary.py
+    __init__.py           BASELINES = {"jw": jw.encode, "parity": parity.encode, ...}
+    jw.py  parity.py                    -- built
+    bk.py  ternary.py                   -- not yet built
   tests/
     test_chain_analytic.py
     test_rejection.py
