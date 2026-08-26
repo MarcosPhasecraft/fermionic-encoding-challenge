@@ -177,9 +177,7 @@ the shrinking suffix `{i,...,M-1}` (vs. JW's growing prefix `{0,...,i}`),
 which pushes weight out of `Num` and into an X-string hopping term instead
 of JW's Z-string.
 
-**Not yet exhaustively optimized** — unlike JW, we have not searched for
-parity's true-optimal ordering. Row-major, snake, and diagonal on the 3×3
-grid give:
+Row-major, snake, and diagonal on the 3×3 grid give:
 
 | ordering | total | max |
 |---|---|---|
@@ -191,5 +189,25 @@ Snake beats row-major on total but loses badly on max — a real
 metric-disagreeing tradeoff for this encoding, unlike JW where row-major
 happened to win on both. (The `237` matching JW's *published* total is very
 likely coincidence — different encoding, no mechanism connects them — not
-a finding to lean on.) Finding parity's actual optimum is open work for a
-future session, not something to assume row-major solves here.
+a finding to lean on.)
+
+**Update — exhaustively searched, via `evaluate()` (all `9!` orderings,
+`verify()` included at each step, ~190s):** the true global optimum for
+parity is `total=233` (achieved exactly at the `snake` permutation above,
+confirmed no ordering beats it) and `max=5` (achieved exactly at
+`row_major`, also confirmed optimal). So the two casual guesses above
+weren't lucky — they really are each objective's true optimum, just at
+*different* orderings, unlike JW where row-major is jointly optimal for
+both.
+
+**JW vs parity, both now exhaustively proven optimal, 3×3 grid:**
+
+| | JW | parity |
+|---|---|---|
+| best total | **201** (row-major) | 233 (snake) |
+| best max | **4** (row-major) | 5 (row-major) |
+
+JW wins outright on both metrics at this size — consistent with the
+paper's qualitative claim that JW is preferred for small grids, even
+though our absolute numbers differ from theirs for the reasons documented
+above.
