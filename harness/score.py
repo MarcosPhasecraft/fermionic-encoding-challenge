@@ -3,10 +3,12 @@
 Assumes `mapping` has already passed verify() -- no re-validation here, same
 division of labor as paulis.py assuming well-formed strings.
 
-Only score_majorana (our own weight definition) is implemented so far.
-score_paper (arXiv 2504.21636 Sec III-C convention) comes with Table I
-calibration (PLAN.md Sec 1.6-1.7 Test 4) -- do not reconstruct it from
-prose, use their released code.
+No separate score_paper: score_majorana, fed hamiltonian(..., model="full"),
+already reproduces arXiv 2504.21636's exact Num+ReHop+ImHop+Inter convention
+(verified against their published equations, not just their prose or
+released code -- see PLAN.md Sec 1.6-1.7 Test 4 for the full derivation).
+A dedicated score_paper would only earn its keep if some other encoding
+reveals a genuine divergence between the two conventions.
 """
 
 import numpy as np

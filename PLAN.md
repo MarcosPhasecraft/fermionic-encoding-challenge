@@ -409,6 +409,16 @@ treating them as ground truth.
 
 Do not begin until Stage 1 is signed off.
 
+> **Built early**: `harness/evaluate.py`'s `evaluate(spec, encode_fn, terms)`
+> already exists, ahead of Stage 2. Nothing about it requires an untrusted
+> `encode_fn` — every Table I comparison in §1.7 Test 4 was, until now, this
+> exact chain hand-rolled inline in ad hoc scripts; formalizing it just means
+> future baselines (and eventually submissions) call one named function
+> instead of re-deriving the chain each time. `tests/test_evaluate.py`
+> confirms it reproduces the verified JW numbers (`total=201, max=4` for
+> `3×3` row-major) and that it gates scoring on a failed `verify()` even for
+> a locally-broken encode_fn.
+
 Nothing in `harness/` changes. Add one wrapper:
 
 ```python
