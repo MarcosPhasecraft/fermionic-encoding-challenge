@@ -3,6 +3,29 @@
 Read `CONTEXT.md` (problem/background) and `PLAN.md` (staged implementation
 plan) before doing any work here. This file is durable guidance that doesn't
 change as the code does — it does not restate what's already in those two.
+`NOTES.md` is a third document, an investigation log (findings, ruled-out
+hypotheses, corrections) — check it before re-deriving something that may
+already be settled there, but don't move plan content into it or log
+content back out of it; the split is deliberate (see below).
+
+## Docs organization — keep the split
+
+Three markdown files, three different jobs. Don't blur them:
+
+- `PLAN.md` — the staged plan: what to build, in what order, the specs and
+  contracts. Should stay short enough to scan. If you're about to add a
+  paragraph documenting a finding, a ruled-out hypothesis, or a bug you just
+  fixed, it goes in `NOTES.md` instead, with only a one-line pointer left in
+  `PLAN.md`. (`PLAN.md` grew to 545 lines once before by not doing this —
+  half of it was an accumulated investigation log crowding out the actual
+  plan. Split back out into `NOTES.md`; don't let it happen again.)
+- `NOTES.md` — the investigation log. Free to grow. Organize by topic, not
+  strictly chronologically, and prefer a clean/deduplicated writeup of what
+  was found over a blow-by-blow "first I thought X, then Y" transcript —
+  that history already exists in conversation logs if it's ever needed.
+- `CLAUDE.md` (this file) — durable rules that should shape behavior in
+  *every* future session: traps, conventions, frozen/editable boundaries.
+  Not findings, not a plan — just the load-bearing rules a finding produced.
 
 ## Frozen vs editable
 
@@ -43,7 +66,7 @@ looking at anything else.
    a JW-specific symmetry makes the code's buggy grouping and the paper's
    correct grouping sum to the same number, but don't assume that holds for
    other encodings. When in doubt, pull the LaTeX source and read the actual
-   equations (PLAN.md §1.6/1.7 has the full derivation) rather than trusting
+   equations (`NOTES.md` has the full derivation) rather than trusting
    either the prose or the code alone.
 4. **Vectorize the commutation check** (`G @ Lambda @ G.T mod 2`). The O(M²)
    Python double loop is a real bottleneck once search starts.
@@ -80,3 +103,7 @@ sizes, not by code review, so don't rely on a submission "looking" uniform.
 - Report metrics as a vector (`total_weight`, `max_weight`, `avg_weight`,
   `n_qubits`); never collapse them into one scalar (e.g. `N × weight`) — see
   PLAN.md §1.6 for why.
+- Every new `baselines/*.py` module needs an entry in `baselines/__init__.py`'s
+  `BASELINES` dict (`{"name": module.encode}`) so cross-encoding comparisons
+  (Test 4, and any future sweep) can loop over all baselines by name instead
+  of importing each module by hand.
