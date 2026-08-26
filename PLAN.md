@@ -344,7 +344,9 @@ encoding-bench/
   CONTEXT.md              problem and background
   PLAN.md                 this file
   NOTES.md                investigation log (Table I, etc.) -- not a plan, don't trim it in here
-  README.md               the contract (write in Stage 2)
+  README.md               project overview + code structure, written early
+                          for the GitHub repo; the Stage-2-specific
+                          submission "contract" section still to come
   run.py                  entry point
   results.tsv             append-only log
   harness/                FROZEN
