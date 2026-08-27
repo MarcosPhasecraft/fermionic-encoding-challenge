@@ -1,130 +1,197 @@
-# encoding-bench
+# The Fermion-to-Qubit Encoding Challenge
 
-A benchmark harness for **fermion-to-qubit encodings** — the maps from
-fermionic creation/annihilation operators to Pauli operators on qubits that
-every quantum simulation algorithm needs. Different valid encodings produce
-wildly different Pauli weights for the same physical Hamiltonian; the goal
-here is a trustworthy, deterministic way to generate, verify, and score
-candidate encodings, so that eventually an automated (or AI-driven) search
-over the encoding space has something reliable to search against.
+> **Goal.** Write the fermion-to-qubit encoding that produces the
+> lowest-weight qubit Hamiltonian for a given fermionic lattice, scored on
+> **total Pauli weight** and **maximum Pauli weight** — two metrics that
+> don't agree, so a good encoding has to reckon with both.
 
-Modeled on [ecdsa.fail](https://ecdsa.fail): a frozen, adversarially-robust
-verifier and scorer, with the thing being evaluated kept as a separate,
-swappable piece. See `CONTEXT.md` for the full physics/motivation and
-`PLAN.md` for the staged build plan.
+---
 
-## Status
+## Why this matters
 
-Stage 1 (build and validate the verifier/scorer against known answers, no
-agent, no search) is well underway. Currently working:
+Simulating fermionic systems — electrons in molecules, materials, lattice
+models — is one of the leading applications of quantum computers. But
+fermionic operators obey anticommutation relations that qubits don't, so
+every simulation algorithm has to start by translating the physics into a
+different language: a **fermion-to-qubit encoding**, a map from fermionic
+operators to Pauli operators on a qubit register.
 
-- Symplectic Pauli representation, vectorized Majorana-algebra verification
-- Rectangular lattice specs with multiple mode orderings (row-major, snake,
-  diagonal, arbitrary custom permutation)
-- Hamiltonian term-list construction (hopping, number, interaction), with a
-  genuinely complex hopping coefficient per arXiv 2504.21636 eq. 10
-- Pauli-weight scoring (total, max, average)
-- Two baseline encodings: Jordan-Wigner and parity basis, both built from a
-  single general linear-encoding constructor
-- 38 passing tests
+That translation is not unique, and the choice matters enormously. The same
+physical Hamiltonian, run through two different (both perfectly valid)
+encodings, can come out with wildly different **Pauli weight** — the number
+of qubits each term acts on. Weight controls circuit depth, gate count, and
+measurement cost directly. A hopping term between two lattice sites that's
+weight 2 under one encoding can be weight 20 under another, purely from how
+the modes got labeled. On a 2D lattice in particular, naive encodings
+routinely produce hopping terms whose weight grows with system size, even
+though the underlying interaction is local.
 
-An extensive investigation validated this against arXiv 2504.21636's
-published Table I: our Jordan-Wigner implementation's max Pauli weight
-exactly matches their published values for `3×3` through `8×8` grids (and
-provably beats them beyond that), and our total Pauli weight beats their
-published values at every grid size checked. Full details, including two
-real bugs found and fixed along the way, are in `NOTES.md`.
+A handful of encodings are well known — Jordan-Wigner, Bravyi-Kitaev,
+parity, ternary tree — but the space of valid ancilla-free encodings is
+roughly `2^(M²)` for `M` fermionic modes. Four points of that space have
+been studied systematically. Nobody knows what the best encoding for a
+given lattice actually looks like.
 
-Not yet built: Bravyi-Kitaev and ternary-tree baselines, stabilizer support,
-and the ordering/Table-I tests aren't yet formalized as pytest files (the
-underlying validation work is done; see `NOTES.md`).
+## The benchmark, precisely
 
-## Documentation map
+You are given a Python harness that:
 
-Four markdown files, each with a distinct job — see `CLAUDE.md` for why
-they're kept separate rather than merged:
+1. **Builds** an encoding by calling `encode(spec) -> mapping`, where
+   `spec` fully describes a rectangular `Lx × Ly` lattice of fermionic
+   modes (mode count, geometry, nearest-neighbour edges, and the mode
+   ordering) and `mapping` gives every one of the `2M` Majorana operators
+   as a Pauli string.
+2. **Verifies** the mapping by checking that its `2M` Majorana operators
+   pairwise anticommute — a symplectic linear-algebra condition over
+   `GF(2)`, checked *exactly*, not by simulation or sampling. If the
+   generators satisfy this one algebraic condition, the map is provably a
+   valid encoding at that system size, full stop: every product of
+   Majoranas — and therefore every fermionic Hamiltonian — maps correctly,
+   automatically. There is no held-out test set to overfit and no
+   approximation to exploit.
+3. **Scores** the mapping by building the lattice's physical Hamiltonian —
+   one number term per mode, one hopping term per edge (with a genuinely
+   complex coefficient, so both its real and imaginary parts count
+   separately), one interaction term per edge — translating every term
+   into Pauli operators via your mapping, and computing each term's weight
+   (how many qubits it acts on nontrivially).
 
-| File | Purpose |
-|---|---|
-| `CONTEXT.md` | The physics problem and why it matters — read this first |
-| `PLAN.md` | The staged implementation plan: what to build, in what order, and the exact specs/contracts |
-| `NOTES.md` | Investigation log: findings, ruled-out hypotheses, corrections (e.g. the Table I comparison) |
-| `CLAUDE.md` | Durable rules for working on this codebase — traps, conventions, the frozen/editable boundary |
+Two independent metrics are reported, and neither is combined into the
+other:
 
-## Code structure
+- **Total Pauli weight** — the sum of every term's weight. Roughly, the
+  cost of measuring the whole Hamiltonian once.
+- **Maximum Pauli weight** — the largest weight of any single term.
+  Roughly, the non-locality that determines simulation circuit depth.
 
-```
-harness/            FROZEN — the trusted core; nothing here should change
-                     to make a submission pass
-  paulis.py          Pauli strings <-> symplectic bit-vector representation;
-                     vectorized pairwise commutation check
-  lattice.py         rectangle() builds lattice specs under various mode
-                     orderings; hamiltonian() builds Majorana-index term
-                     lists from a spec
-  verify.py          verify(spec, mapping) -- checks the mapping is a valid
-                     encoding (well-formed, satisfies the Majorana algebra).
-                     Never raises on malformed input.
-  score.py           score_majorana(spec, mapping, terms) -- Pauli-weight
-                     metrics (total/max/avg) for a verified mapping
-  evaluate.py         evaluate(spec, encode_fn, terms) -- the combinator:
-                     calls encode_fn(spec), then verify(), then score()
-                     only if verification passed
-  constructors.py    from_linear_encoding(U) -- general ancilla-free linear
-                     encoding constructor; baselines build on this
+**Lower is better, on either.** You may optimize for one, the other, or
+try for both — they will not always be minimized by the same encoding.
 
-baselines/           FROZEN — trusted reference implementations
-  __init__.py         BASELINES = {"jw": ..., "parity": ...} registry, by name
-  jw.py               Jordan-Wigner
-  parity.py           Parity basis (dual to Jordan-Wigner)
+### What "valid" means
 
-solution/            EDITABLE, Stage 2 only -- reserved for an agent-written
-                     encode(spec) -> mapping submission; empty for now,
-                     see solution/README.md
+A mapping is rejected if:
 
-tests/               pytest suite, 38 tests
-examples/            Hand-written spec/mapping JSON for run.py's debug path
-run.py               CLI entry point -- `run.py evaluate` scores a
-                     solution/baseline; `run.py verify` is the raw-JSON
-                     debug path
-results.tsv          append-only log of every `run.py evaluate` run
-```
+- it's malformed (wrong qubit count, wrong number of Pauli strings, illegal
+  characters), or
+- any two of its `2M` Majorana operators fail to anticommute.
 
-The core design principle (see `PLAN.md`'s "Strategy" section for the full
-reasoning): every baseline — and eventually every submission — is a
-function `encode(spec) -> mapping`, never a raw table of Pauli strings. A
-raw mapping can't be meaningfully diffed, doesn't generalize across lattice
-sizes, and almost any local edit to it breaks validity. Code, by contrast,
-reads as *ideas* ("build a ternary tree", "order modes by lattice distance")
-that can be improved and compared.
+That's it — one substantive condition. It's checked at whatever system size
+you submit, exactly, every time. There's no larger held-out size where a
+mapping that looked valid at small `M` turns out to be broken.
 
-## Running it
+### Reference numbers
+
+Two baselines exist today — Jordan-Wigner and the parity encoding — and
+one lattice size has been solved exhaustively (all `9!` mode orderings, for
+the `3×3` / 9-mode case):
+
+| encoding | best total weight | best max weight |
+|---|---|---|
+| Jordan-Wigner | **201** | **4** |
+| Parity | 233 | 5 |
+
+Both numbers are provably optimal *for that one lattice size* — no
+reordering of either encoding does better. That's the floor for a solved
+case, not a target: it exists to confirm the harness is trustworthy, not
+because there's room to beat it. The actual open ground is everywhere else
+— larger lattices (nothing above `3×3` has been exhaustively solved),
+different lattice shapes, and encodings nobody has implemented here yet
+(Bravyi-Kitaev, ternary tree, and the much larger space beyond those four
+well-known points).
+
+## How to play
 
 ```bash
+git clone https://github.com/MarcosPhasecraft/fermionic_encodings_harness.git
+cd fermionic_encodings_harness
 pip install -r requirements.txt
-python3 -m pytest tests/ -v          # run the test suite
+```
 
-# Score a solution (or any baseline) against a lattice:
-python3 run.py evaluate --solution baselines/jw.py --lx 3 --ly 3 --note "sanity check"
-# once you have your own solution/encode.py, --solution defaults to it:
+Write your encoding in `solution/encode.py`:
+
+```python
+def encode(spec: dict) -> dict:
+    ...
+    return {
+        "n_qubits": n,               # N >= M
+        "majoranas": [...],          # 2M Pauli strings, length N, chars from IXYZ
+        "stabilizers": [],           # ancilla-free for now: leave empty
+    }
+```
+
+`spec` is a dict with `M` (mode count), `Lx`/`Ly`, `edges` (the fermionic
+interaction graph), and `coords` — everything you need is already in it;
+no other arguments are allowed. A complete, valid (if unremarkable)
+starting point is Jordan-Wigner itself:
+
+```python
+def encode(spec):
+    m = spec["M"]
+    majoranas = []
+    for j in range(m):
+        prefix, suffix = "Z" * j, "I" * (m - j - 1)
+        majoranas += [prefix + "X" + suffix, prefix + "Y" + suffix]
+    return {"n_qubits": m, "majoranas": majoranas, "stabilizers": []}
+```
+
+Then score it:
+
+```bash
 python3 run.py evaluate --lx 3 --ly 3 --note "what I tried"
 ```
 
-Every `evaluate` run prints the full `verify()`+`score()` result and
-appends a row to `results.tsv`. `--ordering` (`row_major`/`snake`/
-`diagonal`), `--model` (`hopping`/`quadratic`/`full`), and `--ly` (defaults
-to `1`, a chain) are also available — see `python3 run.py evaluate --help`.
+This builds the `3×3` spec, runs your `encode(spec)`, verifies the result,
+scores it if verification passed, prints the full result, and appends a
+row to `results.tsv`:
 
-For hand-written debug inputs (raw Pauli strings, not code) see `run.py
-verify --spec examples/spec_chain4.json --mapping examples/mapping_chain4_jw.json`.
+```
+{'passed': True,
+ 'checks': {'well_formed': {'passed': True, 'issues': []},
+            'majorana_algebra': {'passed': True, 'n_violations': 0, 'violations': []}},
+ 'n_qubits': 9,
+ 'total_weight': 201,
+ 'max_weight': 4,
+ 'avg_weight': 2.161290322580645}
+```
 
-## References
+If verification fails, scoring never runs — you'll see exactly which check
+failed and why, with no numbers attached. `--ly` (default `1`, a 1D chain),
+`--ordering` (`row_major` / `snake` / `diagonal`), and `--model`
+(`hopping` / `quadratic` / `full`, default `full`) are also available —
+`python3 run.py evaluate --help` for the full list.
 
-- Chiew, Ibrahim, Safro, Strelchuk, *Optimal fermion-qubit mappings via
-  quadratic assignment*, arXiv 2504.21636 — the primary reference for
-  metric definitions and the Table I comparison in `NOTES.md`.
-- [ecdsa.fail](https://ecdsa.fail) — the benchmark-design precedent this
-  project follows (frozen harness, adversarially-robust verifier, published
-  baselines).
+**There's no public leaderboard or submission service yet** — this is a
+local benchmark for now. Every run just appends to your own `results.tsv`;
+nothing leaves your machine.
 
-See `CONTEXT.md`'s references section for the full encoding/optimization
-literature.
+### What you can edit
+
+You may edit `solution/encode.py` freely — and `solution/memory/`, for your
+own running notes.
+
+You may **not** edit anything under `harness/` or `baselines/` (that's the
+frozen referee — the whole point is that it's trustworthy specifically
+*because* it doesn't change to accommodate a submission) or `results.tsv`
+directly (the harness appends to it for you). You *can* import from
+`harness/` — in particular, `harness.constructors.from_linear_encoding(U)`
+builds a complete ancilla-free encoding from a single invertible matrix
+`U` over `GF(2)`, which is a much smaller design surface than hand-writing
+`2M` Pauli strings if your idea is expressible as a linear encoding.
+
+### A caution on running submissions you didn't write
+
+`solution/encode.py` is arbitrary Python — verification checks the
+*mapping* it returns, not the code itself. If you're running someone
+else's submission, do it somewhere isolated.
+
+## Credits
+
+Metric definitions and the reference baselines here follow Chiew, Ibrahim,
+Safro, Strelchuk, *Optimal fermion-qubit mappings via quadratic
+assignment*, arXiv 2504.21636.
+
+This benchmark's design — a frozen, adversarially-robust harness with the
+thing being evaluated kept as a separate, swappable piece — follows
+[ecdsa.fail](https://ecdsa.fail) and its
+[ecdsafail-challenge](https://github.com/Layr-Labs/ecdsafail-challenge)
+repo. Thanks to that project for the format.
