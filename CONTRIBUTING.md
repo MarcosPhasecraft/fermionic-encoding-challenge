@@ -31,7 +31,7 @@ agent, no search) is well underway. Currently working:
 - Two baseline encodings: Jordan-Wigner and parity basis, both built from a
   single general linear-encoding constructor
 - The `run.py evaluate` CLI and `results.tsv` logging
-- 42 passing tests
+- 44 passing tests
 
 An extensive investigation validated this against arXiv 2504.21636's
 published Table I: our Jordan-Wigner implementation's max Pauli weight
@@ -73,7 +73,8 @@ baselines/           FROZEN — trusted reference implementations
   parity.py          Parity basis (dual to Jordan-Wigner)
 
 solution/            EDITABLE -- a submission's encode(spec) -> mapping goes
-                     here; empty for now, see solution/README.md
+                     here; ships as an unfilled NotImplementedError stub,
+                     see solution/README.md
 
 tests/               pytest suite
 examples/            Hand-written spec/mapping JSON for run.py's debug path

@@ -107,7 +107,9 @@ cd fermionic_encodings_harness
 pip install -r requirements.txt
 ```
 
-Write your encoding in `solution/encode.py`:
+`solution/encode.py` is already there, waiting — it ships as an unfilled
+stub that raises `NotImplementedError` until you write something. The
+contract:
 
 ```python
 def encode(spec: dict) -> dict:

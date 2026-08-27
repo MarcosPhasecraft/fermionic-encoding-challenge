@@ -35,6 +35,19 @@ def test_evaluate_gates_scoring_on_verify_failure():
     assert "total_weight" not in result  # scoring never ran
 
 
+def test_evaluate_reports_crashing_encode_fn_instead_of_raising():
+    def crashing_encode(spec):
+        raise NotImplementedError("write your encoding here")
+
+    spec = rectangle(3, 1)
+    terms = hamiltonian(spec, model="hopping")
+    result = evaluate(spec, crashing_encode, terms)  # must not raise
+
+    assert not result["passed"]
+    assert "NotImplementedError" in result["error"]
+    assert "total_weight" not in result
+
+
 def test_ordering_lives_in_spec_not_in_encode_fn():
     # Same encode_fn (JW), different orderings via different specs -- this
     # is the whole mechanism for comparing orderings: no change to encode_fn

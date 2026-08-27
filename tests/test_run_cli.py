@@ -53,6 +53,22 @@ def test_evaluate_jw_end_to_end(tmp_path):
     assert "201" in lines[1]
 
 
+def test_shipped_stub_fails_cleanly_not_with_a_traceback(tmp_path):
+    # solution/encode.py ships as an unfilled stub -- pin that running it
+    # as-is (the very first thing a fresh clone would do) fails gracefully,
+    # not with a raw Python traceback, and doesn't silently "pass" empty.
+    results_file = tmp_path / "results.tsv"
+    result = _run(
+        "evaluate",
+        "--lx", "3", "--ly", "3",
+        "--results-file", str(results_file),
+    )
+    assert result.returncode != 0
+    assert "Traceback" not in result.stdout
+    assert "'passed': False" in result.stdout
+    assert "NotImplementedError" in result.stdout
+
+
 def test_evaluate_broken_encoding_fails_and_logs(tmp_path):
     broken = tmp_path / "broken.py"
     broken.write_text(
