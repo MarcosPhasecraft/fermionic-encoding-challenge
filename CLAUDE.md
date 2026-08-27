@@ -107,3 +107,9 @@ sizes, not by code review, so don't rely on a submission "looking" uniform.
   `BASELINES` dict (`{"name": module.encode}`) so cross-encoding comparisons
   (Test 4, and any future sweep) can loop over all baselines by name instead
   of importing each module by hand.
+- `run.py evaluate --solution ... --lx ... --ly ...` is the actual
+  contributor-facing entry point (modeled on `ecdsafail run --note`) — it
+  loads an `encode(spec)` from any file path, runs it through `evaluate()`,
+  and appends a row to `results.tsv`. Don't re-invent this ad hoc in a
+  script; extend it if it's missing a flag you need. `run.py verify` is the
+  separate raw-JSON debug path, unrelated to scoring a submission.

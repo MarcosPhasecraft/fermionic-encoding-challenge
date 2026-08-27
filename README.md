@@ -78,11 +78,15 @@ baselines/           FROZEN — trusted reference implementations
   parity.py           Parity basis (dual to Jordan-Wigner)
 
 solution/            EDITABLE, Stage 2 only -- reserved for an agent-written
-                     encode(spec) -> mapping submission; empty for now
+                     encode(spec) -> mapping submission; empty for now,
+                     see solution/README.md
 
 tests/               pytest suite, 38 tests
 examples/            Hand-written spec/mapping JSON for run.py's debug path
-run.py               CLI debug entry point: run.py --spec f.json --mapping g.json
+run.py               CLI entry point -- `run.py evaluate` scores a
+                     solution/baseline; `run.py verify` is the raw-JSON
+                     debug path
+results.tsv          append-only log of every `run.py evaluate` run
 ```
 
 The core design principle (see `PLAN.md`'s "Strategy" section for the full
@@ -99,20 +103,19 @@ that can be improved and compared.
 pip install -r requirements.txt
 python3 -m pytest tests/ -v          # run the test suite
 
-# Or evaluate an encoding directly:
-python3 -c "
-from harness.evaluate import evaluate
-from harness.lattice import rectangle, hamiltonian
-from baselines.jw import encode
-
-spec = rectangle(3, 3)
-result = evaluate(spec, encode, hamiltonian(spec, model='full'))
-print(result)
-"
+# Score a solution (or any baseline) against a lattice:
+python3 run.py evaluate --solution baselines/jw.py --lx 3 --ly 3 --note "sanity check"
+# once you have your own solution/encode.py, --solution defaults to it:
+python3 run.py evaluate --lx 3 --ly 3 --note "what I tried"
 ```
 
+Every `evaluate` run prints the full `verify()`+`score()` result and
+appends a row to `results.tsv`. `--ordering` (`row_major`/`snake`/
+`diagonal`), `--model` (`hopping`/`quadratic`/`full`), and `--ly` (defaults
+to `1`, a chain) are also available — see `python3 run.py evaluate --help`.
+
 For hand-written debug inputs (raw Pauli strings, not code) see `run.py
---spec examples/spec_chain4.json --mapping examples/mapping_chain4_jw.json`.
+verify --spec examples/spec_chain4.json --mapping examples/mapping_chain4_jw.json`.
 
 ## References
 

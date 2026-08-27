@@ -1,0 +1,2 @@
+timestamp	note	solution	lx	ly	ordering	model	passed	n_qubits	total_weight	max_weight	avg_weight
+2026-08-27T11:54:22	sanity check: JW baseline via CLI	baselines/jw.py	3	3	row_major	full	True	9	201	4	2.161290322580645

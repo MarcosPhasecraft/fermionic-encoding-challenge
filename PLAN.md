@@ -41,9 +41,11 @@ them even where they seem like extra ceremony in Stage 1.**
    lattice data. Signature is exactly `f(spec)`. Anything a smart encoder could
    want — `coords`, `edges`, `Lx`, `Ly` — goes in the spec now.
 
-Raw Pauli strings remain available as a **debug path** (`run.py --mapping
-file.json`) for hand-written unit tests such as the small rejection cases. The
-primary path is always a function.
+Raw Pauli strings remain available as a **debug path** (`run.py verify
+--spec spec.json --mapping mapping.json`) for hand-written unit tests such
+as the small rejection cases. The primary path is always a function
+(`run.py evaluate --solution encode.py --lx ... --ly ...`, built ahead of
+schedule — see `NOTES.md`).
 
 A consequence: the Stage 2 regression test becomes trivially true, since it is
 the same code. That is the intended outcome. The real Stage 2 question is
@@ -347,8 +349,8 @@ encoding-bench/
   README.md               project overview + code structure, written early
                           for the GitHub repo; the Stage-2-specific
                           submission "contract" section still to come
-  run.py                  entry point
-  results.tsv             append-only log
+  run.py                  entry point: `evaluate` (primary) + `verify` (debug), built ahead of schedule
+  results.tsv             append-only log, written by `run.py evaluate`
   harness/                FROZEN
     paulis.py             symplectic representation, vectorized
     lattice.py            rectangle(), orderings, Hamiltonian term lists
