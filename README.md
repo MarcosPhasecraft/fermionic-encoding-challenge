@@ -2,8 +2,9 @@
 
 > **Goal.** Write the fermion-to-qubit encoding that produces the
 > lowest-weight qubit Hamiltonian for a given fermionic lattice, scored on
-> **total Pauli weight** and **maximum Pauli weight** — two metrics that
-> don't agree, so a good encoding has to reckon with both.
+> **total Pauli weight** and **maximum Pauli weight** — two independent
+> measures of success, one mattering most for VQE-style measurement, the
+> other for Trotterized time dynamics.
 
 ---
 
