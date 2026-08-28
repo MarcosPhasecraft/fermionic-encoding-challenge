@@ -84,14 +84,17 @@ The open ground is genuinely open: different lattice shapes, and
 encodings nobody has implemented here yet (Bravyi-Kitaev, ternary tree,
 and the much larger space beyond those four well-known points).
 
-**Found something better?** Turn it into a `baselines/<name>.py` (see
-`CONTRIBUTING.md`), register it, then run:
+**Found something better?**
 
 ```bash
-python3 scripts/update_leaderboard.py
+python3 scripts/submit_baseline.py --file your_file.py --name your_name --sizes 3-15
 ```
 
-and commit the regenerated `LEADERBOARD.md` alongside your new baseline.
+`--sizes` can be a range, a single size, or a list — a submission doesn't
+have to cover every size. This only adds it if it actually passes at
+every size claimed; see `CONTRIBUTING.md` for the full workflow. Then run
+`python3 scripts/update_leaderboard.py` and commit both alongside
+`LEADERBOARD.md`.
 
 ## How to play
 

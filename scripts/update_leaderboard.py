@@ -85,18 +85,26 @@ def best_over_orderings(encode_fn, lx, ly):
 
 
 def compute_our_entries():
-    """entries[metric] = list of (label, link, {size_index: value})."""
+    """entries[metric] = list of (label, link, {size_index: value}).
+
+    Only computes the sizes each baseline actually claims (registry.json's
+    "sizes" list) -- a size-scoped submission just gets fewer entries in
+    its dicts, which render_ranked_table already handles as "not ranked
+    at this size" rather than needing an explicit blank convention.
+    """
     total_entries, max_entries = [], []
-    for name, encode_fn in BASELINES.items():
+    for name, entry in BASELINES.items():
+        encode_fn, sizes = entry["encode"], entry["sizes"]
         label = PAPER_ROW_FOR.get(name, name)
         link = source_link(encode_fn)
         totals, maxes = {}, {}
-        for i, l in enumerate(SIZES):
+        for l in sizes:
+            i = SIZES.index(l)
             total, max_weight = best_over_orderings(encode_fn, l, l)
             totals[i] = total
             maxes[i] = max_weight
-        print(f"{name}: total={[totals[i] for i in range(len(SIZES))]}")
-        print(f"{name}: max={[maxes[i] for i in range(len(SIZES))]}")
+        print(f"{name}: total={totals}")
+        print(f"{name}: max={maxes}")
         total_entries.append((label, link, totals))
         max_entries.append((label, link, maxes))
     return total_entries, max_entries

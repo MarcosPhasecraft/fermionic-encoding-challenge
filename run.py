@@ -14,7 +14,6 @@
 
 import argparse
 import datetime
-import importlib.util
 import json
 import pprint
 import sys
@@ -22,6 +21,7 @@ from pathlib import Path
 
 from harness.evaluate import evaluate
 from harness.lattice import hamiltonian, rectangle
+from harness.loading import load_encode_fn
 from harness.verify import verify
 
 RESULTS_TSV = Path(__file__).parent / "results.tsv"
@@ -29,17 +29,6 @@ _TSV_COLUMNS = [
     "timestamp", "note", "solution", "lx", "ly", "ordering", "model",
     "passed", "n_qubits", "total_weight", "max_weight", "avg_weight",
 ]
-
-
-def _load_encode_fn(path: str):
-    if not Path(path).is_file():
-        raise SystemExit(f"no such file: {path!r}")
-    module_spec = importlib.util.spec_from_file_location("submission", path)
-    module = importlib.util.module_from_spec(module_spec)
-    module_spec.loader.exec_module(module)
-    if not hasattr(module, "encode"):
-        raise SystemExit(f"{path} has no encode(spec) function")
-    return module.encode
 
 
 def _append_result(row: dict, results_file: Path):
@@ -59,7 +48,7 @@ def cmd_verify(args):
 
 
 def cmd_evaluate(args):
-    encode_fn = _load_encode_fn(args.solution)
+    encode_fn = load_encode_fn(args.solution)
     spec = rectangle(args.lx, args.ly, ordering=args.ordering)
     terms = hamiltonian(spec, model=args.model)
     result = evaluate(spec, encode_fn, terms)

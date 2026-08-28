@@ -94,19 +94,32 @@ can be improved and compared.
 
 ## Adding a baseline
 
-1. `baselines/<name>.py` with an `encode(spec) -> mapping` function. If it's
-   a linear encoding (most ancilla-free ones are), build it from
-   `harness/constructors.py`'s `from_linear_encoding(U)` rather than hand-
-   writing Pauli strings — see `baselines/parity.py` for the pattern, and
-   sanity-check against `from_linear_encoding(I)`, which must reproduce
-   `baselines/jw.py` exactly.
-2. Register it in `baselines/__init__.py`'s `BASELINES` dict.
+1. Write `encode(spec) -> mapping` in a file (anywhere — it doesn't need to
+   be inside the repo yet). If it's a linear encoding (most ancilla-free
+   ones are), build it from `harness/constructors.py`'s
+   `from_linear_encoding(U)` rather than hand-writing Pauli strings — see
+   `baselines/parity.py` for the pattern, and sanity-check against
+   `from_linear_encoding(I)`, which must reproduce `baselines/jw.py`
+   exactly.
+2. Test and register it in one step:
+
+   ```bash
+   python3 scripts/submit_baseline.py --file your_file.py --name your_name --sizes 3-15
+   ```
+
+   `--sizes` accepts a range (`3-15`), a single size (`8`), or a list
+   (`8,10,12`) — a submission doesn't have to cover the full range;
+   defaults to `3-15` if omitted. This checks `verify()` passes at *every*
+   claimed size under all three built-in orderings, and only if everything
+   passes does it copy the file to `baselines/your_name.py` and add it to
+   `baselines/registry.json`. A failure explains exactly which size and why,
+   and touches nothing. Never hand-edit `registry.json` directly.
 3. Add `tests/test_<name>.py` — at minimum, `verify()` passes for a few
    sizes, and pin the resulting Pauli-string structure so a future refactor
    can't silently change it.
 4. Run `python3 scripts/update_leaderboard.py` (seconds — evaluates the
-   three built-in orderings across every grid size from `3×3` to `15×15`,
-   not an exhaustive search over all orderings; see the file's own
+   three built-in orderings across every grid size each registered baseline
+   claims, not an exhaustive search over all orderings; see the file's own
    docstring) and commit the regenerated `LEADERBOARD.md` alongside your
    new baseline. Never hand-edit that file directly.
 
