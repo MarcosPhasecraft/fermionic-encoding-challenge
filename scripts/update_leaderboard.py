@@ -1,19 +1,25 @@
 """Regenerates LEADERBOARD.md from scratch.
 
-For every baseline registered in baselines.BASELINES, and for every square
-grid from 3x3 to 15x15, evaluates the encoding under the three orderings
-the harness provides (row_major, snake, diagonal) and reports the best of
-those three per metric. This is NOT an exhaustive search over all M!
-orderings -- that only ever worked for the 3x3 case (M=9, 9!=362880 is
-searchable; M=225 at 15x15 is not, by an enormous margin). A handful of
-3x3 entries are additionally known to be the true global optimum from a
-separate exhaustive search -- see NOTES.md, not reproduced here.
+Layout: one table per metric (total, max), columns fixed at 3x3..15x15,
+but ROWS ARE RANK POSITIONS, not fixed encodings -- row 1 is whoever
+actually wins at that size, row 2 the runner-up, etc. A column can (and
+does, at larger sizes) have a different winner than its neighbor, which a
+fixed-row-per-encoding table can't represent; this can. It also means a
+size-scoped submission (one that only claims some sizes) just doesn't
+appear in the ranking for sizes it has no value for -- no blank-cell
+bookkeeping needed, the column for that size simply has fewer rows filled.
 
-Static reference rows (arXiv 2504.21636's own published Table I) are
-included alongside our own computed rows for direct comparison, pulled
-from the paper's LaTeX source (not its prose, not its released code --
-see NOTES.md for why that distinction matters) and hardcoded below since
-they don't come from running any code here.
+For every baseline registered in baselines.BASELINES, evaluates it under
+the harness's three built-in orderings (row_major, snake, diagonal) and
+takes the best of those three per metric, per size -- NOT an exhaustive
+search over all orderings (infeasible beyond the smallest sizes; see
+NOTES.md for the one size, 3x3, where a separate exhaustive search
+additionally confirms these are the true global optimum).
+
+Paper reference rows (arXiv 2504.21636's own published Table I) are
+static data pulled from the paper's LaTeX source (not its prose, not its
+released code -- see NOTES.md for why that distinction matters),
+hardcoded below since they don't come from running any code here.
 
 Run this after adding or improving a baseline. LEADERBOARD.md is a
 generated artifact -- never hand-edit it.
@@ -35,7 +41,6 @@ ORDERINGS = ("row_major", "snake", "diagonal")
 
 # arXiv 2504.21636 Table I, verbatim from the LaTeX source (main.tex, the
 # \begin{table*}...\end{table*} block labeled tab:lattice), for L=3..15.
-# Row labels as printed in the paper: BK, JW, PB, TT.
 PAPER_TOTAL = {
     "BK": [304, 635, 1107, 1712, 2473, 3331, 4467, 5741, 7127, 8850, 10438, 12595, 14522],
     "JW": [237, 512, 909, 1460, 2189, 3104, 4277, 5632, 7389, 9320, 11609, 14364, 17601],
@@ -49,19 +54,15 @@ PAPER_MAX = {
     "TT": [5, 5, 7, 7, 8, 8, 9, 9, 9, 10, 10, 10, 11],
 }
 # Which of our baselines.BASELINES names correspond to which paper row --
-# used both to display our own row under the paper's own notation (JW, PB,
-# not the lowercase registry key) and to place the two rows adjacent for
-# direct comparison. Anything registered under a name not listed here (e.g.
-# a genuinely new encoding) just displays under its registry name, with no
-# paper row next to it -- correctly, since the paper has no data for it.
+# used to display our own row under the paper's own notation (JW, PB, not
+# the lowercase registry key). Anything registered under a name not listed
+# here just displays under its registry name.
 PAPER_ROW_FOR = {"jw": "JW", "parity": "PB"}
 
 
 def source_link(encode_fn) -> str:
     """Repo-relative path to the file defining encode_fn, for a markdown
-    link straight to the actual submission -- works for anything in
-    BASELINES, not just these two, since it just asks Python where the
-    function's code lives rather than hardcoding paths per baseline.
+    link straight to the actual submission.
     """
     path = Path(inspect.getsourcefile(encode_fn)).resolve()
     return path.relative_to(REPO_ROOT).as_posix()
@@ -83,71 +84,94 @@ def best_over_orderings(encode_fn, lx, ly):
     return best_total, best_max
 
 
-def compute_our_rows():
-    totals, maxes, labels = {}, {}, {}
+def compute_our_entries():
+    """entries[metric] = list of (label, link, {size_index: value})."""
+    total_entries, max_entries = [], []
     for name, encode_fn in BASELINES.items():
-        labels[name] = (PAPER_ROW_FOR.get(name, name), source_link(encode_fn))
-        totals[name], maxes[name] = [], []
-        for l in SIZES:
+        label = PAPER_ROW_FOR.get(name, name)
+        link = source_link(encode_fn)
+        totals, maxes = {}, {}
+        for i, l in enumerate(SIZES):
             total, max_weight = best_over_orderings(encode_fn, l, l)
-            totals[name].append(total)
-            maxes[name].append(max_weight)
-        print(f"{name}: total={totals[name]}")
-        print(f"{name}: max={maxes[name]}")
-    return totals, maxes, labels
+            totals[i] = total
+            maxes[i] = max_weight
+        print(f"{name}: total={[totals[i] for i in range(len(SIZES))]}")
+        print(f"{name}: max={[maxes[i] for i in range(len(SIZES))]}")
+        total_entries.append((label, link, totals))
+        max_entries.append((label, link, maxes))
+    return total_entries, max_entries
 
 
-def render_table(f, title, formula, our_rows, paper_rows, row_labels):
+def paper_entries(paper_dict):
+    return [(key, None, dict(enumerate(values))) for key, values in paper_dict.items()]
+
+
+def render_cell(label, link, value):
+    if link:
+        return f"[{label}]({link}) — {value}"
+    return f"{label} [[1]](#references) — {value}"
+
+
+def render_ranked_table(f, title, formula, entries):
     f.write(f"## {title}\n\n")
     f.write(f"`{formula}`\n\n")
+
+    columns = []
+    for i in range(len(SIZES)):
+        col = [(values[i], label, link) for label, link, values in entries if i in values]
+        col.sort(key=lambda t: t[0])
+        columns.append(col)
+
+    max_rows = max(len(c) for c in columns)
+
     header = " | ".join(f"{l}×{l}" for l in SIZES)
-    f.write(f"| encoding | {header} |\n")
+    f.write(f"| rank | {header} |\n")
     f.write("|---" * (len(SIZES) + 1) + "|\n")
 
-    seen_paper_rows = set()
-    for name in our_rows:
-        label, link = row_labels[name]
-        values = " | ".join(str(v) for v in our_rows[name])
-        f.write(f"| **[{label}]({link})** (ours) | {values} |\n")
-        paper_key = PAPER_ROW_FOR.get(name)
-        if paper_key:
-            values = " | ".join(str(v) for v in paper_rows[paper_key])
-            f.write(f"| {paper_key} (arXiv 2504.21636) | {values} |\n")
-            seen_paper_rows.add(paper_key)
-
-    for paper_key, values in paper_rows.items():
-        if paper_key not in seen_paper_rows:
-            values_str = " | ".join(str(v) for v in values)
-            f.write(f"| {paper_key} (arXiv 2504.21636, not yet implemented here) | {values_str} |\n")
+    for rank in range(max_rows):
+        cells = []
+        for col in columns:
+            if rank < len(col):
+                value, label, link = col[rank]
+                cells.append(render_cell(label, link, value))
+            else:
+                cells.append("")
+        f.write(f"| {rank + 1} | " + " | ".join(cells) + " |\n")
 
     f.write("\n")
 
 
 def main():
-    our_totals, our_maxes, row_labels = compute_our_rows()
+    our_totals, our_maxes = compute_our_entries()
 
     leaderboard_path = REPO_ROOT / "LEADERBOARD.md"
     with open(leaderboard_path, "w") as f:
         f.write("# Leaderboard -- square grids, 3x3 to 15x15\n\n")
         f.write(
             "Generated by `scripts/update_leaderboard.py` — **do not hand-edit this "
-            "file**. \"(ours)\" rows are the best of the harness's three built-in "
-            "orderings (`row_major`, `snake`, `diagonal`) for the current code in "
-            "`baselines/` — a cheap, always-tractable check, *not* an exhaustive "
-            "search over all orderings (infeasible beyond the smallest sizes; see "
-            "NOTES.md for the one size, 3×3, where a separate exhaustive search "
-            "additionally confirms these are the true global optimum). \"(arXiv "
-            "2504.21636)\" rows are that paper's own published Table I, included for "
-            "direct comparison, not computed by anything here.\n\n"
+            "file**. Rows are rank positions, not fixed encodings: row 1 is whoever "
+            "actually has the best score at that size, row 2 the runner-up, and so "
+            "on, so a column can have a different winner than its neighbor. Our own "
+            "entries are the best of the harness's three built-in orderings "
+            "(`row_major`, `snake`, `diagonal`), not an exhaustive search over every "
+            "ordering (infeasible beyond the smallest sizes; see NOTES.md for the "
+            "one size, 3×3, where a separate exhaustive search additionally confirms "
+            "these are the true global optimum). `[1]` rows are arXiv 2504.21636's "
+            "own published Table I, included for direct comparison.\n\n"
             "Lower is better, on both tables.\n\n"
         )
-        render_table(
+        render_ranked_table(
             f, "Total Pauli weight", "D = Num + ReHop + ImHop + Inter",
-            our_totals, PAPER_TOTAL, row_labels,
+            our_totals + paper_entries(PAPER_TOTAL),
         )
-        render_table(
+        render_ranked_table(
             f, "Maximum Pauli weight", "D = max(Num, ReHop, ImHop, Inter)",
-            our_maxes, PAPER_MAX, row_labels,
+            our_maxes + paper_entries(PAPER_MAX),
+        )
+        f.write(
+            "## References\n\n"
+            "[1] Chiew, Ibrahim, Safro, Strelchuk, *Optimal fermion-qubit mappings "
+            "via quadratic assignment*, arXiv 2504.21636.\n"
         )
 
     print(f"wrote {leaderboard_path}")
