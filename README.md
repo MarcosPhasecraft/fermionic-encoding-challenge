@@ -69,19 +69,16 @@ That's it — one substantive condition. It's checked at whatever system size
 you submit, exactly, every time. There's no larger held-out size where a
 mapping that looked valid at small `M` turns out to be broken.
 
-### Reference numbers
+### Leaderboard
 
-See [`LEADERBOARD.md`](LEADERBOARD.md) for the current numbers — every
-square grid from `3×3` to `15×15`, for every encoding implemented so far,
-laid out the same way as arXiv 2504.21636's own Table I (one table for
-total Pauli weight, one for maximum), with that paper's published numbers
-included alongside ours for direct comparison. It's a generated file, not
-hand-maintained text: every one of our own rows is the literal output of
-`scripts/update_leaderboard.py` re-running the current code (the best of
-the harness's three built-in orderings — a cheap, always-tractable check,
-not an exhaustive search over every possible ordering, which stops being
-feasible past the smallest sizes), so it can't drift from what the
-harness actually computes.
+See [`LEADERBOARD.md`](LEADERBOARD.md) — total and maximum Pauli weight
+for every encoding implemented so far, across every square grid from
+`3×3` to `15×15`, with arXiv 2504.21636's own published numbers included
+for direct comparison. Every number there comes from actually running
+the current code, not hand-typed, and reflects the best of the harness's
+three built-in orderings — not an exhaustive search over every possible
+ordering, so there may be room to improve a listed number just by trying
+a different ordering, not only by writing a new encoding.
 
 The open ground is genuinely open: different lattice shapes, and
 encodings nobody has implemented here yet (Bravyi-Kitaev, ternary tree,
