@@ -115,9 +115,10 @@ def paper_entries(paper_dict):
 
 
 def render_cell(label, link, value):
-    if link:
-        return f"[{label}]({link}) — {value}"
-    return f"{label} [[1]](#references) — {value}"
+    # <br>, not a raw newline -- markdown table cells are single-line, so a
+    # literal line break needs the HTML tag to render as two lines on GitHub.
+    name = f"[{label}]({link})" if link else f"{label} [[1]](#references)"
+    return f"**{value}**<br>{name}"
 
 
 def render_ranked_table(f, title, formula, entries):
