@@ -320,3 +320,64 @@ alone doesn't), each is registered under *both* — `baselines/bk.py`
 — so the tradeoff stays visible on the leaderboard (`BK (row-major)` vs.
 `BK (snake)` as separate, independently-ranked rows) rather than being
 picked once on the maintainers' behalf.
+
+## Leaderboard regeneration caching
+
+`scripts/update_leaderboard.py` used to re-evaluate every registered
+baseline from scratch on every run, deliberately (see the earlier note
+above) -- fine when every baseline was a cheap closed-form linear
+encoding, but once submissions started doing real optimization internally
+(`geo_ternary_anneal_ensemble`'s five independent simulated-annealing
+restarts per size took ~7.5 minutes on its own), regenerating the whole
+leaderboard for one new, unrelated baseline became genuinely slow.
+
+Fixed with a fingerprint-gated cache (`.leaderboard_cache.json`,
+gitignored -- local build state, not repo content): each baseline's
+per-size `(total, max)` is cached against a hash of that baseline's own
+source file, and a hash of every file in `harness/` gates the *entire*
+cache at once. The harness-wide gate matters because a baseline's score
+can depend on harness utilities its `encode()`/`order()` call into (e.g.
+`harness.constructors.from_linear_encoding`), not just the scoring
+functions proper -- there's no safe way to track "which harness files
+affect which baseline" per-entry, so any change anywhere in `harness/`
+invalidates every cached score at once rather than risking a stale one
+that "looks" unaffected. The harness isn't expected to change going
+forward, but the cache doesn't assume that.
+
+Verified end to end, not just unit-tested: ran the real script twice.
+First run (cold cache) took 7:33 and produced byte-identical output to
+the pre-caching version; second run (warm cache, nothing changed) took
+0.06s and was *also* byte-identical. `scripts/update_leaderboard.py`'s
+`scored_with_cache` (the actual per-baseline hit/miss decision) is unit
+tested with a call-counting fake `evaluate_baseline`, so a cache hit is
+proven by "the expensive function was never called again," not just by
+the returned numbers matching.
+
+## Registry uniformity backfill
+
+The four baselines registered before `--label` existed (`jw`, `parity`,
+`bk`, `ternary`, plus their `_snake` siblings) had no `label` field in
+`registry.json` at all -- the leaderboard's pretty names for them (`JW`,
+`BK (row-major)`, etc.) came entirely from a separate hardcoded
+`PAPER_ROW_FOR` override dict in `scripts/update_leaderboard.py`, not from
+the registry. Backfilled `label` into `registry.json` for all of them
+(the same strings `PAPER_ROW_FOR` used to supply) and removed
+`PAPER_ROW_FOR` entirely -- every entry's display name now comes from the
+same place, the registry's own `label` field, with no special-casing by
+name.
+
+Also backfilled `submitted_at` (each baseline's actual first-commit date,
+pulled from `git log --follow --diff-filter=A`, not a fabricated "now") and
+`generated_by` for every baseline registered before those fields existed,
+so all eleven current registry entries share the exact same key set —
+no entry's provenance is structurally distinguishable from another's by
+"predates the tooling that would have recorded it." `generated_by` for
+`geo_ternary`/`geo_ternary_opt`/`geo_ternary_anneal` specifically (submitted
+before `submission.json` existed, so genuinely undocumented) was the
+user's own call, not something independently verified.
+
+Local-only complement: `inbox/_processed/<timestamp>_<name>/` archive
+folders (matching the format `scripts/process_inbox.py` produces for a
+real submission) were created for all ten pre-existing baselines too, so
+every registered encoding — however it actually arrived historically —
+has the same uniform local record.

@@ -177,11 +177,14 @@ below (e.g. something that arrived by another channel):
    sizes, pin the resulting Pauli-string structure so a future refactor
    can't silently change it, and (if you defined one) pin `order()` against
    whichever built-in permutation function it should match.
-4. Run `python3 scripts/update_leaderboard.py` (seconds — evaluates each
-   registered baseline once per grid size it claims, under its own declared
-   ordering, not a search over multiple orderings; see the file's own
-   docstring) and commit the regenerated `LEADERBOARD.md` alongside your
-   new baseline. Never hand-edit that file directly.
+4. Run `python3 scripts/update_leaderboard.py` and commit the regenerated
+   `LEADERBOARD.md` alongside your new baseline. Never hand-edit that file
+   directly. Only your new baseline (and anything else whose own file
+   changed) actually gets evaluated — everyone else's score is reused from
+   `.leaderboard_cache.json` (gitignored, local build state) unless
+   `harness/` itself changed since it was cached, which invalidates
+   everything at once rather than risking a silently stale number; see the
+   script's own docstring for the exact scheme.
 
 ## Processing external submissions (fully automated)
 

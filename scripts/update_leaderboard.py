@@ -28,10 +28,27 @@ static data pulled from the paper's LaTeX source (not its prose, not its
 released code -- see NOTES.md for why that distinction matters),
 hardcoded below since they don't come from running any code here.
 
+Caches each baseline's per-size (total, max) in .leaderboard_cache.json
+(gitignored -- local build state, not repo content), keyed by a hash of
+that baseline's own source file. A baseline whose file hasn't changed
+since last time reuses its cached score instead of rerunning verify()+
+score() from scratch -- matters once a submission's own encode() does
+something expensive (a local search, an ensemble of restarts; adding one
+new baseline used to mean re-running every existing one too). A hash of
+the whole harness/ directory gates the entire cache: since a baseline's
+score can depend on harness utilities it calls into (e.g.
+harness.constructors.from_linear_encoding), not just its own file, ANY
+change anywhere in harness/ invalidates every cached score at once, never
+just the ones that "look" affected -- this cannot go stale silently. The
+harness's own scoring logic isn't expected to change going forward, but
+the cache is built to not assume that.
+
 Run this after adding or improving a baseline. LEADERBOARD.md is a
 generated artifact -- never hand-edit it.
 """
 
+import hashlib
+import json
 import sys
 from pathlib import Path
 
@@ -43,6 +60,7 @@ from harness.evaluate import evaluate
 from harness.lattice import build_spec, hamiltonian
 
 SIZES = list(range(3, 16))
+CACHE_PATH = REPO_ROOT / ".leaderboard_cache.json"
 
 # arXiv 2504.21636 Table I, verbatim from the LaTeX source (main.tex, the
 # \begin{table*}...\end{table*} block labeled tab:lattice), for L=3..15.
@@ -57,24 +75,6 @@ PAPER_MAX = {
     "JW": [4, 5, 6, 7, 8, 9, 11, 12, 14, 15, 16, 18, 20],
     "PB": [5, 6, 7, 8, 9, 10, 12, 13, 14, 15, 17, 18, 20],
     "TT": [5, 5, 7, 7, 8, 8, 9, 9, 9, 10, 10, 10, 11],
-}
-# Which of our baselines.BASELINES names correspond to which paper row --
-# used to display our own row under the paper's own notation (JW, PB, not
-# the lowercase registry key), overriding whatever "label" a registry entry
-# might carry. Anything registered under a name not listed here displays
-# under its own registry "label" (scripts/submit_baseline.py's --label,
-# defaulting to the registry name for entries registered before that
-# option existed). Parity/BK/TT each get two entries (row_major, snake)
-# since no single one of the built-in orderings is best on both metrics
-# for those three encodings -- see NOTES.md.
-PAPER_ROW_FOR = {
-    "jw": "JW",
-    "parity": "PB (row-major)",
-    "parity_snake": "PB (snake)",
-    "bk": "BK (row-major)",
-    "bk_snake": "BK (snake)",
-    "ternary": "TT (row-major)",
-    "ternary_snake": "TT (snake)",
 }
 
 
@@ -97,6 +97,74 @@ def evaluate_baseline(encode_fn, order_fn, lx, ly):
     return result["total_weight"], result["max_weight"]
 
 
+def _hash_file(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _harness_fingerprint() -> str:
+    """Hash of every harness/*.py file's content, sorted by filename for
+    determinism. Gates the whole cache at once (see module docstring) --
+    a baseline's score can depend on any harness utility its encode()/
+    order() calls into, not just the scoring functions proper, so there's
+    no safe way to track "which files affect which baseline" per-entry.
+    """
+    hasher = hashlib.sha256()
+    for path in sorted((REPO_ROOT / "harness").glob("*.py")):
+        hasher.update(path.name.encode())
+        hasher.update(path.read_bytes())
+    return hasher.hexdigest()
+
+
+def _load_cache() -> dict:
+    if not CACHE_PATH.is_file():
+        return {}
+    try:
+        return json.loads(CACHE_PATH.read_text())
+    except json.JSONDecodeError:
+        return {}
+
+
+def _save_cache(cache: dict) -> None:
+    CACHE_PATH.write_text(json.dumps(cache, indent=2) + "\n")
+
+
+def scored_with_cache(name, encode_fn, order_fn, sizes, file_fp, cache_entries):
+    """(totals_by_size_index, maxes_by_size_index, any_recomputed) for one
+    baseline. Reuses cache_entries[name]'s stored scores for whichever
+    sizes are already cached under a matching file_fp (that baseline's own
+    current fingerprint); anything not cached (a fingerprint mismatch --
+    the file changed -- invalidates all of that entry's old scores at
+    once, not just the sizes that happen to differ; or a size not seen
+    before) is computed via evaluate_baseline and folded into
+    cache_entries[name] in place, so the caller can persist it.
+
+    Pulled out of compute_our_entries() specifically so this -- the actual
+    caching decision -- is testable with fake encode_fn/order_fn and an
+    arbitrary fingerprint string, without needing real baseline files or
+    the real harness/ directory.
+    """
+    cached = cache_entries.get(name)
+    if cached is None or cached["fingerprint"] != file_fp:
+        cached = {"fingerprint": file_fp, "scores": {}}
+
+    totals, maxes = {}, {}
+    any_recomputed = False
+    for l in sizes:
+        i = SIZES.index(l)
+        hit = cached["scores"].get(str(l))
+        if hit is not None:
+            total, max_weight = hit["total"], hit["max"]
+        else:
+            total, max_weight = evaluate_baseline(encode_fn, order_fn, l, l)
+            cached["scores"][str(l)] = {"total": total, "max": max_weight}
+            any_recomputed = True
+        totals[i] = total
+        maxes[i] = max_weight
+
+    cache_entries[name] = cached
+    return totals, maxes, any_recomputed
+
+
 def compute_our_entries():
     """entries[metric] = list of (label, link, {size_index: value}).
 
@@ -104,22 +172,37 @@ def compute_our_entries():
     "sizes" list) -- a size-scoped submission just gets fewer entries in
     its dicts, which render_ranked_table already handles as "not ranked
     at this size" rather than needing an explicit blank convention.
+
+    See the module docstring for the caching scheme (per-baseline file
+    hash, gated by a whole-harness/ hash) and scored_with_cache for the
+    actual per-baseline hit/miss decision.
     """
+    cache = _load_cache()
+    harness_fp = _harness_fingerprint()
+    if cache.get("_harness_fingerprint") != harness_fp:
+        # Something in harness/ changed since the cache was written -- every
+        # previously cached score is potentially stale, so start clean.
+        cache = {"_harness_fingerprint": harness_fp, "entries": {}}
+    cache.setdefault("entries", {})
+
     total_entries, max_entries = [], []
     for name, entry in BASELINES.items():
         encode_fn, order_fn, sizes = entry["encode"], entry["order"], entry["sizes"]
-        label = PAPER_ROW_FOR.get(name, entry["label"])
-        link = source_link(entry["module"])
-        totals, maxes = {}, {}
-        for l in sizes:
-            i = SIZES.index(l)
-            total, max_weight = evaluate_baseline(encode_fn, order_fn, l, l)
-            totals[i] = total
-            maxes[i] = max_weight
-        print(f"{name}: total={totals}")
-        print(f"{name}: max={maxes}")
+        label, module = entry["label"], entry["module"]
+        link = source_link(module)
+        file_fp = _hash_file(REPO_ROOT / f"{module.replace('.', '/')}.py")
+
+        totals, maxes, any_recomputed = scored_with_cache(
+            name, encode_fn, order_fn, sizes, file_fp, cache["entries"],
+        )
+
+        status = "recomputed" if any_recomputed else "cached, unchanged"
+        print(f"{name} ({status}): total={totals}")
+        print(f"{name} ({status}): max={maxes}")
         total_entries.append((label, link, totals))
         max_entries.append((label, link, maxes))
+
+    _save_cache(cache)
     return total_entries, max_entries
 
 

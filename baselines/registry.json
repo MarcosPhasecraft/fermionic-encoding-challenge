@@ -15,7 +15,10 @@
       13,
       14,
       15
-    ]
+    ],
+    "label": "JW",
+    "generated_by": "Claude Sonnet 5",
+    "submitted_at": "2026-08-26T04:39:45+00:00"
   },
   "parity": {
     "module": "baselines.parity",
@@ -33,7 +36,10 @@
       13,
       14,
       15
-    ]
+    ],
+    "label": "PB (row-major)",
+    "generated_by": "Claude Sonnet 5",
+    "submitted_at": "2026-08-26T07:56:09+00:00"
   },
   "bk": {
     "module": "baselines.bk",
@@ -51,7 +57,10 @@
       13,
       14,
       15
-    ]
+    ],
+    "label": "BK (row-major)",
+    "generated_by": "Claude Sonnet 5",
+    "submitted_at": "2026-08-28T04:34:50+00:00"
   },
   "ternary": {
     "module": "baselines.ternary",
@@ -69,7 +78,10 @@
       13,
       14,
       15
-    ]
+    ],
+    "label": "TT (row-major)",
+    "generated_by": "Claude Sonnet 5",
+    "submitted_at": "2026-08-28T04:34:50+00:00"
   },
   "parity_snake": {
     "module": "baselines.parity_snake",
@@ -87,7 +99,10 @@
       13,
       14,
       15
-    ]
+    ],
+    "label": "PB (snake)",
+    "generated_by": "Claude Sonnet 5",
+    "submitted_at": "2026-08-28T05:11:08+00:00"
   },
   "bk_snake": {
     "module": "baselines.bk_snake",
@@ -105,7 +120,10 @@
       13,
       14,
       15
-    ]
+    ],
+    "label": "BK (snake)",
+    "generated_by": "Claude Sonnet 5",
+    "submitted_at": "2026-08-28T05:11:08+00:00"
   },
   "ternary_snake": {
     "module": "baselines.ternary_snake",
@@ -123,7 +141,10 @@
       13,
       14,
       15
-    ]
+    ],
+    "label": "TT (snake)",
+    "generated_by": "Claude Sonnet 5",
+    "submitted_at": "2026-08-28T05:11:08+00:00"
   },
   "geo_ternary": {
     "module": "baselines.geo_ternary",
@@ -142,7 +163,9 @@
       14,
       15
     ],
-    "label": "Geo Ternary"
+    "label": "Geo Ternary",
+    "generated_by": "Claude Sonnet 5",
+    "submitted_at": "2026-08-28T06:37:11+00:00"
   },
   "geo_ternary_opt": {
     "module": "baselines.geo_ternary_opt",
@@ -161,7 +184,9 @@
       14,
       15
     ],
-    "label": "Geo Ternary (optimized)"
+    "label": "Geo Ternary (optimized)",
+    "generated_by": "Claude Sonnet 5",
+    "submitted_at": "2026-08-28T06:37:11+00:00"
   },
   "geo_ternary_anneal": {
     "module": "baselines.geo_ternary_anneal",
@@ -180,7 +205,9 @@
       14,
       15
     ],
-    "label": "Geo Ternary (annealed)"
+    "label": "Geo Ternary (annealed)",
+    "generated_by": "Claude Sonnet 5",
+    "submitted_at": "2026-08-28T06:37:11+00:00"
   },
   "geo_ternary_anneal_ensemble": {
     "module": "baselines.geo_ternary_anneal_ensemble",

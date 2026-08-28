@@ -13,3 +13,8 @@ venv/
 # has it.
 inbox/*
 !inbox/README.md
+
+# scripts/update_leaderboard.py's per-baseline score cache -- local build
+# state, safely regenerable from scratch (see that script's docstring for
+# the invalidation scheme), not repo content.
+.leaderboard_cache.json
