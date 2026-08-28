@@ -17,7 +17,11 @@ like .DS_Store), in sorted order:
   3. Reject a --name already present in baselines/registry.json.
   4. Run the exact same verify() gate scripts/submit_baseline.py uses,
      at every size the manifest claims (scripts/submission_lib.py's
-     check_at_size -- shared, not reimplemented).
+     check_at_size -- shared, not reimplemented). Progress prints live,
+     one line per size, as each one finishes -- a submission whose own
+     encode() does something expensive (a local search, an ensemble of
+     several restarts) can legitimately take minutes per size; this is
+     what tells you it's still working rather than stuck.
 
 A submission that fails any step is reported with a concrete reason and
 left untouched in inbox/ -- it's automatically retried the next run once
@@ -111,10 +115,12 @@ def _process_one(folder: Path, registry: dict) -> dict:
         validate_encode_source(encode_path.read_text())
 
         encode_fn, order_fn = load_submission(str(encode_path))
+        print(f"\ntesting {folder.name!r} ('{manifest['name']}') at sizes {manifest['sizes']} ...", flush=True)
         scores = {}
         for l in manifest["sizes"]:
             total, max_weight = check_at_size(encode_fn, order_fn, l)
             scores[l] = {"total": total, "max": max_weight}
+            print(f"  {l}x{l}: total={total} max={max_weight}", flush=True)
 
         dest = submission_lib.BASELINES_DIR / f"{name}.py"
         shutil.copy(encode_path, dest)
@@ -175,6 +181,7 @@ def main():
     if not pending:
         print("inbox/ has nothing pending.")
         return
+    print(f"{len(pending)} pending: {', '.join(p.name for p in pending)}")
 
     registry = load_registry()
     results = [_process_one(folder, registry) for folder in pending]
