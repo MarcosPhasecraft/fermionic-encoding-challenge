@@ -104,6 +104,9 @@ can be improved and compared.
 3. Add `tests/test_<name>.py` — at minimum, `verify()` passes for a few
    sizes, and pin the resulting Pauli-string structure so a future refactor
    can't silently change it.
+4. Run `python3 scripts/update_leaderboard.py` (a few minutes — exhaustive
+   `9!` search per baseline) and commit the regenerated `LEADERBOARD.md`
+   alongside your new baseline. Never hand-edit that file directly.
 
 ## Running the test suite
 

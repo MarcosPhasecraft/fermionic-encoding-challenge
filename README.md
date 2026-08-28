@@ -71,23 +71,30 @@ mapping that looked valid at small `M` turns out to be broken.
 
 ### Reference numbers
 
-Two baselines exist today — Jordan-Wigner and the parity encoding — and
-one lattice size has been solved exhaustively (all `9!` mode orderings, for
-the `3×3` / 9-mode case):
+See [`LEADERBOARD.md`](LEADERBOARD.md) for the current numbers — one
+lattice size (`3×3`, 9 modes) solved exhaustively (all `9!` mode
+orderings) for every encoding implemented so far. It's a generated file,
+not hand-maintained text: every number in it is the literal output of
+`scripts/update_leaderboard.py` re-running the current code, so it can't
+drift from what the harness actually computes.
 
-| encoding | best total weight | best max weight |
-|---|---|---|
-| Jordan-Wigner | **201** | **4** |
-| Parity | 233 | 5 |
-
-Both numbers are provably optimal *for that one lattice size* — no
-reordering of either encoding does better. That's the floor for a solved
-case, not a target: it exists to confirm the harness is trustworthy, not
-because there's room to beat it. The actual open ground is everywhere else
-— larger lattices (nothing above `3×3` has been exhaustively solved),
+Whatever's on top there is provably optimal *for that one lattice size* —
+no reordering does better. That's the floor for a solved case, not a
+target: it exists to confirm the harness is trustworthy, not because
+there's room to beat it. The actual open ground is everywhere else —
+larger lattices (nothing above `3×3` has been exhaustively solved),
 different lattice shapes, and encodings nobody has implemented here yet
 (Bravyi-Kitaev, ternary tree, and the much larger space beyond those four
 well-known points).
+
+**Found something better?** Turn it into a `baselines/<name>.py` (see
+`CONTRIBUTING.md`), register it, then run:
+
+```bash
+python3 scripts/update_leaderboard.py
+```
+
+and commit the regenerated `LEADERBOARD.md` alongside your new baseline.
 
 ## How to play
 
