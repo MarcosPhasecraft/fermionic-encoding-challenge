@@ -124,11 +124,27 @@ def paper_entries(paper_dict):
     return [(key, None, dict(enumerate(values))) for key, values in paper_dict.items()]
 
 
-def render_cell(label, link, value):
+def render_cell(value, contenders):
     # <br>, not a raw newline -- markdown table cells are single-line, so a
     # literal line break needs the HTML tag to render as two lines on GitHub.
-    name = f"[{label}]({link})" if link else f"{label} [[1]](#references)"
-    return f"**{value}**<br>{name}"
+    # contenders is a list since exact ties share one cell/rank (see
+    # NOTES.md's "9x9 TT tie" finding) -- one name per line below the value.
+    names = [f"[{label}]({link})" if link else f"{label} [[1]](#references)" for label, link in contenders]
+    return f"**{value}**<br>" + "<br>".join(names)
+
+
+def group_ties(col):
+    """col: sorted [(value, label, link), ...] -> [(value, [(label, link), ...]), ...],
+    merging consecutive equal values into one group -- an exact tie is one
+    rank, not several, and shows every contender in that one cell.
+    """
+    groups = []
+    for value, label, link in col:
+        if groups and groups[-1][0] == value:
+            groups[-1][1].append((label, link))
+        else:
+            groups.append((value, [(label, link)]))
+    return groups
 
 
 def render_ranked_table(f, title, formula, entries):
@@ -139,7 +155,7 @@ def render_ranked_table(f, title, formula, entries):
     for i in range(len(SIZES)):
         col = [(values[i], label, link) for label, link, values in entries if i in values]
         col.sort(key=lambda t: t[0])
-        columns.append(col)
+        columns.append(group_ties(col))
 
     max_rows = max(len(c) for c in columns)
 
@@ -151,8 +167,8 @@ def render_ranked_table(f, title, formula, entries):
         cells = []
         for col in columns:
             if rank < len(col):
-                value, label, link = col[rank]
-                cells.append(render_cell(label, link, value))
+                value, contenders = col[rank]
+                cells.append(render_cell(value, contenders))
             else:
                 cells.append("")
         f.write(f"| {rank + 1} | " + " | ".join(cells) + " |\n")
@@ -177,7 +193,9 @@ def main():
             "an encoding's own best total and best max weight come from genuinely "
             "different orderings, it appears twice (e.g. `BK (row-major)` / "
             "`BK (snake)`) rather than one entry silently mixing numbers from two "
-            "different runs. `[1]` rows are arXiv 2504.21636's own published "
+            "different runs. An exact tie between two or more entries shares one "
+            "rank and one cell -- value on top, every tied contender listed "
+            "below it. `[1]` rows are arXiv 2504.21636's own published "
             "Table I, included for direct comparison.\n\n"
             "Lower is better, on both tables.\n\n"
         )
