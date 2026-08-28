@@ -10,27 +10,17 @@
 ## Why this matters
 
 Simulating fermionic systems — electrons in molecules, materials, lattice
-models — is one of the leading applications of quantum computers. But
-fermionic operators obey anticommutation relations that qubits don't, so
-every simulation algorithm has to start by translating the physics into a
-different language: a **fermion-to-qubit encoding**, a map from fermionic
-operators to Pauli operators on a qubit register.
-
-That translation is not unique, and the choice matters enormously. The same
-physical Hamiltonian, run through two different (both perfectly valid)
-encodings, can come out with wildly different **Pauli weight** — the number
-of qubits each term acts on. Weight controls circuit depth, gate count, and
-measurement cost directly. A hopping term between two lattice sites that's
-weight 2 under one encoding can be weight 20 under another, purely from how
-the modes got labeled. On a 2D lattice in particular, naive encodings
-routinely produce hopping terms whose weight grows with system size, even
-though the underlying interaction is local.
-
-A handful of encodings are well known — Jordan-Wigner, Bravyi-Kitaev,
-parity, ternary tree — but the space of valid ancilla-free encodings is
-roughly `2^(M²)` for `M` fermionic modes. Four points of that space have
-been studied systematically. Nobody knows what the best encoding for a
-given lattice actually looks like.
+models — is one of the most promising applications of quantum computers.
+But quantum computers are built from qubits, which don't obey the same
+anticommutation relations fermions do, so every simulation has to start
+with a **fermion-to-qubit encoding**: a map from fermionic operators to
+qubit (Pauli) operators. Different valid encodings optimize different
+things, and can produce wildly different **Pauli weight** — the qubit cost
+driving circuit depth and measurement cost — for the exact same physics.
+In one dimension the optimal choice is well understood; in two dimensions,
+on the lattices that actually describe real materials, it isn't. Recent
+work (arXiv 2504.21636, our primary reference) has started mapping out
+that space, but nobody knows what the best 2D encoding actually looks like.
 
 ## The benchmark, precisely
 
