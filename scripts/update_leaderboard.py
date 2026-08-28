@@ -1,17 +1,25 @@
-"""Regenerates LEADERBOARD.md from scratch by exhaustively searching all
-9! mode orderings, for every baseline registered in baselines.BASELINES,
-on the 3x3 grid (M=9) -- the one lattice size small enough to search
-exactly rather than trust a single ordering.
+"""Regenerates LEADERBOARD.md from scratch.
+
+For every baseline registered in baselines.BASELINES, and for every square
+grid from 3x3 to 15x15, evaluates the encoding under the three orderings
+the harness provides (row_major, snake, diagonal) and reports the best of
+those three per metric. This is NOT an exhaustive search over all M!
+orderings -- that only ever worked for the 3x3 case (M=9, 9!=362880 is
+searchable; M=225 at 15x15 is not, by an enormous margin). A handful of
+3x3 entries are additionally known to be the true global optimum from a
+separate exhaustive search -- see NOTES.md, not reproduced here.
+
+Static reference rows (arXiv 2504.21636's own published Table I) are
+included alongside our own computed rows for direct comparison, pulled
+from the paper's LaTeX source (not its prose, not its released code --
+see NOTES.md for why that distinction matters) and hardcoded below since
+they don't come from running any code here.
 
 Run this after adding or improving a baseline. LEADERBOARD.md is a
-generated artifact -- never hand-edit it, since the whole point is that
-every number in it is the literal output of running the current code,
-not a claim. Takes a few minutes per registered baseline.
+generated artifact -- never hand-edit it.
 """
 
-import itertools
 import sys
-import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -20,49 +28,111 @@ from baselines import BASELINES
 from harness.evaluate import evaluate
 from harness.lattice import hamiltonian, rectangle
 
-LX = LY = 3
-M = LX * LY
+SIZES = list(range(3, 16))
+ORDERINGS = ("row_major", "snake", "diagonal")
+
+# arXiv 2504.21636 Table I, verbatim from the LaTeX source (main.tex, the
+# \begin{table*}...\end{table*} block labeled tab:lattice), for L=3..15.
+# Row labels as printed in the paper: BK, JW, PB, TT.
+PAPER_TOTAL = {
+    "BK": [304, 635, 1107, 1712, 2473, 3331, 4467, 5741, 7127, 8850, 10438, 12595, 14522],
+    "JW": [237, 512, 909, 1460, 2189, 3104, 4277, 5632, 7389, 9320, 11609, 14364, 17601],
+    "PB": [301, 645, 1147, 1815, 2683, 3775, 5155, 6751, 8729, 10987, 13657, 17449, 20505],
+    "TT": [313, 628, 1080, 1676, 2375, 3237, 4303, 5473, 6799, 8342, 9853, 11844, 13942],
+}
+PAPER_MAX = {
+    "BK": [5, 7, 9, 9, 11, 11, 12, 13, 13, 13, 14, 15, 15],
+    "JW": [4, 5, 6, 7, 8, 9, 11, 12, 14, 15, 16, 18, 20],
+    "PB": [5, 6, 7, 8, 9, 10, 12, 13, 14, 15, 17, 18, 20],
+    "TT": [5, 5, 7, 7, 8, 8, 9, 9, 9, 10, 10, 10, 11],
+}
+# Which of our baselines.BASELINES names correspond to which paper row, so
+# the two can be shown adjacent for direct comparison. Anything registered
+# under a name not listed here (e.g. a genuinely new encoding) just gets no
+# paper row next to it -- correctly, since the paper has no data for it.
+PAPER_ROW_FOR = {"jw": "JW", "parity": "PB"}
 
 
-def best_for(encode_fn):
+def best_over_orderings(encode_fn, lx, ly):
     best_total = None
     best_max = None
-    for perm in itertools.permutations(range(M)):
-        spec = rectangle(LX, LY, ordering="custom", perm=list(perm))
+    for ordering in ORDERINGS:
+        spec = rectangle(lx, ly, ordering=ordering)
         terms = hamiltonian(spec, model="full")
         result = evaluate(spec, encode_fn, terms)
         if not result["passed"]:
-            raise RuntimeError(f"encode_fn failed verify() at perm {perm}: {result}")
-        if best_total is None or result["total_weight"] < best_total[0]:
-            best_total = (result["total_weight"], perm)
-        if best_max is None or result["max_weight"] < best_max[0]:
-            best_max = (result["max_weight"], perm)
-    return best_total[0], best_max[0]
+            raise RuntimeError(f"{encode_fn} failed verify() at {lx}x{ly}/{ordering}: {result}")
+        if best_total is None or result["total_weight"] < best_total:
+            best_total = result["total_weight"]
+        if best_max is None or result["max_weight"] < best_max:
+            best_max = result["max_weight"]
+    return best_total, best_max
+
+
+def compute_our_rows():
+    totals, maxes = {}, {}
+    for name, encode_fn in BASELINES.items():
+        totals[name], maxes[name] = [], []
+        for l in SIZES:
+            total, max_weight = best_over_orderings(encode_fn, l, l)
+            totals[name].append(total)
+            maxes[name].append(max_weight)
+        print(f"{name}: total={totals[name]}")
+        print(f"{name}: max={maxes[name]}")
+    return totals, maxes
+
+
+def render_table(f, title, formula, our_rows, paper_rows):
+    f.write(f"## {title}\n\n")
+    f.write(f"`{formula}`\n\n")
+    header = " | ".join(f"{l}×{l}" for l in SIZES)
+    f.write(f"| encoding | {header} |\n")
+    f.write("|---" * (len(SIZES) + 1) + "|\n")
+
+    seen_paper_rows = set()
+    for name in our_rows:
+        values = " | ".join(str(v) for v in our_rows[name])
+        f.write(f"| **{name}** (ours) | {values} |\n")
+        paper_key = PAPER_ROW_FOR.get(name)
+        if paper_key:
+            values = " | ".join(str(v) for v in paper_rows[paper_key])
+            f.write(f"| {paper_key} (arXiv 2504.21636) | {values} |\n")
+            seen_paper_rows.add(paper_key)
+
+    for paper_key, values in paper_rows.items():
+        if paper_key not in seen_paper_rows:
+            values_str = " | ".join(str(v) for v in values)
+            f.write(f"| {paper_key} (arXiv 2504.21636, not yet implemented here) | {values_str} |\n")
+
+    f.write("\n")
 
 
 def main():
-    rows = []
-    for name, encode_fn in BASELINES.items():
-        t0 = time.time()
-        total, max_weight = best_for(encode_fn)
-        print(f"{name}: total={total} max={max_weight} ({time.time() - t0:.0f}s)")
-        rows.append((name, total, max_weight))
-
-    rows.sort(key=lambda r: r[1])  # best total first
+    our_totals, our_maxes = compute_our_rows()
 
     leaderboard_path = Path(__file__).parent.parent / "LEADERBOARD.md"
     with open(leaderboard_path, "w") as f:
-        f.write("# Leaderboard -- 3x3 grid (M=9)\n\n")
+        f.write("# Leaderboard -- square grids, 3x3 to 15x15\n\n")
         f.write(
-            "Generated by `scripts/update_leaderboard.py` — every number here is the\n"
-            "true global optimum, found by exhaustive search over all `9!` mode\n"
-            "orderings, not a claim. **Do not hand-edit this file** — run the script\n"
-            "again after adding or improving a `baselines/` entry.\n\n"
+            "Generated by `scripts/update_leaderboard.py` — **do not hand-edit this "
+            "file**. \"(ours)\" rows are the best of the harness's three built-in "
+            "orderings (`row_major`, `snake`, `diagonal`) for the current code in "
+            "`baselines/` — a cheap, always-tractable check, *not* an exhaustive "
+            "search over all orderings (infeasible beyond the smallest sizes; see "
+            "NOTES.md for the one size, 3×3, where a separate exhaustive search "
+            "additionally confirms these are the true global optimum). \"(arXiv "
+            "2504.21636)\" rows are that paper's own published Table I, included for "
+            "direct comparison, not computed by anything here.\n\n"
+            "Lower is better, on both tables.\n\n"
         )
-        f.write("| encoding | best total weight | best max weight |\n")
-        f.write("|---|---|---|\n")
-        for name, total, max_weight in rows:
-            f.write(f"| {name} | {total} | {max_weight} |\n")
+        render_table(
+            f, "Total Pauli weight", "D = Num + ReHop + ImHop + Inter",
+            our_totals, PAPER_TOTAL,
+        )
+        render_table(
+            f, "Maximum Pauli weight", "D = max(Num, ReHop, ImHop, Inter)",
+            our_maxes, PAPER_MAX,
+        )
 
     print(f"wrote {leaderboard_path}")
 

@@ -71,21 +71,21 @@ mapping that looked valid at small `M` turns out to be broken.
 
 ### Reference numbers
 
-See [`LEADERBOARD.md`](LEADERBOARD.md) for the current numbers — one
-lattice size (`3×3`, 9 modes) solved exhaustively (all `9!` mode
-orderings) for every encoding implemented so far. It's a generated file,
-not hand-maintained text: every number in it is the literal output of
-`scripts/update_leaderboard.py` re-running the current code, so it can't
-drift from what the harness actually computes.
+See [`LEADERBOARD.md`](LEADERBOARD.md) for the current numbers — every
+square grid from `3×3` to `15×15`, for every encoding implemented so far,
+laid out the same way as arXiv 2504.21636's own Table I (one table for
+total Pauli weight, one for maximum), with that paper's published numbers
+included alongside ours for direct comparison. It's a generated file, not
+hand-maintained text: every one of our own rows is the literal output of
+`scripts/update_leaderboard.py` re-running the current code (the best of
+the harness's three built-in orderings — a cheap, always-tractable check,
+not an exhaustive search over every possible ordering, which stops being
+feasible past the smallest sizes), so it can't drift from what the
+harness actually computes.
 
-Whatever's on top there is provably optimal *for that one lattice size* —
-no reordering does better. That's the floor for a solved case, not a
-target: it exists to confirm the harness is trustworthy, not because
-there's room to beat it. The actual open ground is everywhere else —
-larger lattices (nothing above `3×3` has been exhaustively solved),
-different lattice shapes, and encodings nobody has implemented here yet
-(Bravyi-Kitaev, ternary tree, and the much larger space beyond those four
-well-known points).
+The open ground is genuinely open: different lattice shapes, and
+encodings nobody has implemented here yet (Bravyi-Kitaev, ternary tree,
+and the much larger space beyond those four well-known points).
 
 **Found something better?** Turn it into a `baselines/<name>.py` (see
 `CONTRIBUTING.md`), register it, then run:

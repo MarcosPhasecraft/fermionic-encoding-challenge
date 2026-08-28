@@ -104,9 +104,11 @@ can be improved and compared.
 3. Add `tests/test_<name>.py` — at minimum, `verify()` passes for a few
    sizes, and pin the resulting Pauli-string structure so a future refactor
    can't silently change it.
-4. Run `python3 scripts/update_leaderboard.py` (a few minutes — exhaustive
-   `9!` search per baseline) and commit the regenerated `LEADERBOARD.md`
-   alongside your new baseline. Never hand-edit that file directly.
+4. Run `python3 scripts/update_leaderboard.py` (seconds — evaluates the
+   three built-in orderings across every grid size from `3×3` to `15×15`,
+   not an exhaustive search over all orderings; see the file's own
+   docstring) and commit the regenerated `LEADERBOARD.md` alongside your
+   new baseline. Never hand-edit that file directly.
 
 ## Running the test suite
 
