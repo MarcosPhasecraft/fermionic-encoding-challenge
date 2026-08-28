@@ -101,6 +101,22 @@ solution/            EDITABLE -- a submission's encode(spec) -> mapping goes
                      here; ships as an unfilled NotImplementedError stub,
                      see solution/README.md
 
+inbox/               gitignored except README.md -- drop external
+                     submission folders here for scripts/process_inbox.py;
+                     see inbox/README.md for the exact format
+
+scripts/
+  submission_lib.py  shared validation/verify()-gate logic -- used by both
+                     submit_baseline.py and process_inbox.py so "what
+                     counts as passing" has one implementation
+  submit_baseline.py manual path: test and register one ad hoc file by hand
+  process_inbox.py   fully automated path: scans inbox/, validates,
+                     verifies, registers, regenerates the leaderboard,
+                     re-runs the test suite, then asks you (not an AI) on
+                     the terminal whether to commit/push
+  update_leaderboard.py  regenerates LEADERBOARD.md from every registered
+                     baseline
+
 tests/               pytest suite
 examples/            Hand-written spec/mapping JSON for run.py's debug path
 run.py               CLI entry point -- `run.py evaluate` scores a
@@ -117,7 +133,11 @@ almost any local edit to it breaks validity. Code, by contrast, reads as
 *ideas* ("build a ternary tree", "order modes by lattice distance") that
 can be improved and compared.
 
-## Adding a baseline
+## Adding a baseline (maintainer-authored, or one ad hoc file by hand)
+
+For a new reference baseline you're writing yourself, or for testing a
+single external file by hand without going through the inbox format
+below (e.g. something that arrived by another channel):
 
 1. Write `encode(spec) -> mapping` in a file (anywhere — it doesn't need to
    be inside the repo yet). If it's a linear encoding (most ancilla-free
@@ -162,6 +182,39 @@ can be improved and compared.
    ordering, not a search over multiple orderings; see the file's own
    docstring) and commit the regenerated `LEADERBOARD.md` alongside your
    new baseline. Never hand-edit that file directly.
+
+## Processing external submissions (fully automated)
+
+For handling a batch of external submissions with zero manual flags and
+no AI judgment calls: they go in `inbox/<folder>/{encode.py,
+submission.json}` (exact schema in `inbox/README.md`), then
+
+```bash
+python3 scripts/process_inbox.py
+```
+
+does everything step 1-4 above does by hand, automatically, for every
+pending folder: validates the manifest and the file's structure (rejects
+a file that doesn't define exactly one top-level `encode`, or that
+defines any top-level name more than once — the guard against a file
+with an earlier submission's code left in it), runs the same `verify()`
+gate, and on success registers it, regenerates `LEADERBOARD.md`, and
+re-runs the test suite. A rejected submission is left in `inbox/` with a
+concrete reason printed — fix it and run the command again. The one thing
+it does *not* do is write a bespoke `tests/test_<name>.py` the way step 3
+above describes; that still requires reading and understanding the
+submission, which isn't something to mechanize. If a submission is
+interesting enough to want that, add it by hand afterward.
+
+If anything was accepted, the script's very last step prompts you, right
+there on the terminal, whether to push to GitHub, commit locally only, or
+do neither — the only human-facing step in the whole flow, and it's a
+plain `input()` prompt, not a question routed through an AI.
+
+`scripts/submission_lib.py` holds the actual pass/fail logic (manifest
+validation, the AST duplicate-binding check, the `verify()` gate) shared
+by both this and the manual `submit_baseline.py` path above, so the two
+can never drift on what "passing" means.
 
 ## Running the test suite
 

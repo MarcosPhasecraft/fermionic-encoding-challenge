@@ -86,18 +86,27 @@ encodings beyond JW, parity basis, Bravyi-Kitaev, and ternary tree.
 
 **Found something better?**
 
-```bash
-python3 scripts/submit_baseline.py --file your_file.py --name your_name --label "Your Display Name" --sizes 3-15
+Drop it in its own folder under `inbox/`:
+
+```
+inbox/<any-folder-name>/
+  encode.py         # def encode(spec) -> mapping; optional def order(Lx, Ly) -> perm
+  submission.json   # {"name": "...", "label": "...", "sizes": "3-15"}
 ```
 
-`--name` is the tidy filesystem-safe registry key (becomes
-`baselines/your_name.py`); `--label` is what actually shows on the
-leaderboard (defaults to `--name` if omitted). `--sizes` can be a range, a
-single size, or a list — a submission doesn't have to cover every size.
-This only adds it if it actually passes at every size claimed; see
-`CONTRIBUTING.md` for the full workflow. Then run
-`python3 scripts/update_leaderboard.py` and commit both alongside
-`LEADERBOARD.md`.
+then run:
+
+```bash
+python3 scripts/process_inbox.py
+```
+
+That's the whole submission process — one command, no manual flags. It
+validates the manifest and the file, runs `verify()` at every size
+claimed, and only if everything passes registers it, regenerates
+`LEADERBOARD.md`, and re-runs the test suite. See `inbox/README.md` for
+the exact manifest schema. (A single ad hoc file can still be tested by
+hand with `scripts/submit_baseline.py --file ... --name ...` — see
+`CONTRIBUTING.md`.)
 
 ## How to play
 

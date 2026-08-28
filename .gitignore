@@ -5,3 +5,11 @@ __pycache__/
 .venv/
 venv/
 .DS_Store
+
+# inbox/ holds raw incoming submissions and the processed archive -- local
+# working state for scripts/process_inbox.py, not repo content. The actual
+# record of what got accepted is baselines/*.py + baselines/registry.json,
+# which are tracked normally. Keep the format doc tracked so a fresh clone
+# has it.
+inbox/*
+!inbox/README.md

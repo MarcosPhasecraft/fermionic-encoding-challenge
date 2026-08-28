@@ -33,6 +33,11 @@ Three markdown files, three different jobs. Don't blur them:
   not modify them to make a submission pass — that defeats the point of a
   trusted referee.
 - `solution/` is the only editable directory, and only from Stage 2 onward.
+- `inbox/` is a maintainer-facing staging area for external submissions
+  (gitignored except `inbox/README.md`) — not part of the frozen/editable
+  contract a challenge player interacts with. It only changes via
+  `scripts/process_inbox.py`, which never writes to it or to `baselines/`
+  unless a submission already passes `verify()` at every size it claims.
 - If a change to `harness/` or `baselines/` seems necessary, stop and flag it
   explicitly rather than making it quietly — it means either a real bug in
   the referee (rare, high-stakes) or a submission trying to game it (assume
@@ -112,12 +117,15 @@ keyed to specific sizes the submitter happens to know are tested.
   `n_qubits`); never collapse them into one scalar (e.g. `N × weight`) — see
   PLAN.md §1.6 for why.
 - Every new `baselines/*.py` module needs an entry in `baselines/registry.json`
-  (`{"name": {"module": ..., "sizes": [...]}}`, read by `baselines/__init__.py`
-  into `BASELINES`) so cross-encoding comparisons (Test 4, the leaderboard,
-  and any future sweep) can loop over all baselines by name instead of
-  importing each module by hand. Never hand-edit `registry.json` directly —
-  `scripts/submit_baseline.py` writes it only after confirming the submission
-  passes at every size it claims.
+  (`{"name": {"module": ..., "sizes": [...], "label": ...}}`, read by
+  `baselines/__init__.py` into `BASELINES`) so cross-encoding comparisons
+  (Test 4, the leaderboard, and any future sweep) can loop over all
+  baselines by name instead of importing each module by hand. Never
+  hand-edit `registry.json` directly — `scripts/submit_baseline.py` (one
+  file, by hand) and `scripts/process_inbox.py` (a batch from `inbox/`,
+  fully automated) both write it only after confirming a submission passes
+  `verify()` at every size it claims, via the shared logic in
+  `scripts/submission_lib.py`.
 - `run.py evaluate --solution ... --lx ... --ly ...` is the actual
   contributor-facing entry point (modeled on `ecdsafail run --note`) — it
   loads an `encode(spec)` from any file path, runs it through `evaluate()`,
