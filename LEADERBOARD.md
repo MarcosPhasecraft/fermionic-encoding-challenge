@@ -42,4 +42,4 @@ Lower is better, on both tables.
 
 ## References
 
-[1] Chiew, Ibrahim, Safro, Strelchuk, *Optimal fermion-qubit mappings via quadratic assignment*, arXiv 2504.21636.
+[1] Chiew, Ibrahim, Safro, Strelchuk, *Optimal fermion-qubit mappings via quadratic assignment*, arXiv 2504.21636. Code: [`github.com/cameton/QCE_QubitAssignment`](https://github.com/cameton/QCE_QubitAssignment).

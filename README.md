@@ -208,7 +208,8 @@ else's submission, do it somewhere isolated.
 
 Metric definitions and the reference baselines here follow Chiew, Ibrahim,
 Safro, Strelchuk, *Optimal fermion-qubit mappings via quadratic
-assignment*, arXiv 2504.21636.
+assignment*, arXiv 2504.21636 — code:
+[`github.com/cameton/QCE_QubitAssignment`](https://github.com/cameton/QCE_QubitAssignment).
 
 This benchmark's design — a frozen, adversarially-robust harness with the
 thing being evaluated kept as a separate, swappable piece — follows

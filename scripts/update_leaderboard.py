@@ -192,7 +192,9 @@ def main():
         f.write(
             "## References\n\n"
             "[1] Chiew, Ibrahim, Safro, Strelchuk, *Optimal fermion-qubit mappings "
-            "via quadratic assignment*, arXiv 2504.21636.\n"
+            "via quadratic assignment*, arXiv 2504.21636. Code: "
+            "[`github.com/cameton/QCE_QubitAssignment`]"
+            "(https://github.com/cameton/QCE_QubitAssignment).\n"
         )
 
     print(f"wrote {leaderboard_path}")

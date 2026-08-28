@@ -169,7 +169,10 @@ python3 -m pytest tests/ -v
 
 - Chiew, Ibrahim, Safro, Strelchuk, *Optimal fermion-qubit mappings via
   quadratic assignment*, arXiv 2504.21636 — the primary reference for
-  metric definitions and the Table I comparison in `NOTES.md`.
+  metric definitions and the Table I comparison in `NOTES.md`. Their
+  released code, cross-checked repeatedly throughout `NOTES.md` (cost
+  model, Fenwick/Sierpinski constructions, solver objectives):
+  [`github.com/cameton/QCE_QubitAssignment`](https://github.com/cameton/QCE_QubitAssignment).
 - [ecdsa.fail](https://ecdsa.fail) / [ecdsafail-challenge](https://github.com/Layr-Labs/ecdsafail-challenge)
   — the benchmark-design precedent this project follows (frozen harness,
   adversarially-robust verifier, published baselines).
