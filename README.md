@@ -1,4 +1,4 @@
-# The Fermion-to-Qubit Encoding Challenge
+# The Fermionic Encoding Challenge
 
 > **Goal.** Write the fermion-to-qubit encoding that produces the
 > lowest-weight qubit Hamiltonian for a given fermionic lattice, scored on
