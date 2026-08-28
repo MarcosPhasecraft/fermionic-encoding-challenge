@@ -250,5 +250,14 @@
     "label": "Geo Ternary (multi-topology, optimized)",
     "generated_by": "Claude Sonnet 5",
     "submitted_at": "2026-08-28T20:24:13+00:00"
+  },
+  "geo_ternary_adaptive": {
+    "module": "baselines.geo_ternary_adaptive",
+    "sizes": [
+      7
+    ],
+    "label": "Geo Ternary (adaptive topology)",
+    "generated_by": "Codex GPT-5",
+    "submitted_at": "2026-08-28T21:43:24+00:00"
   }
 }
