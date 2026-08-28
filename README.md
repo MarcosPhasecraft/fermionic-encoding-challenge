@@ -87,12 +87,15 @@ encodings beyond JW, parity basis, Bravyi-Kitaev, and ternary tree.
 **Found something better?**
 
 ```bash
-python3 scripts/submit_baseline.py --file your_file.py --name your_name --sizes 3-15
+python3 scripts/submit_baseline.py --file your_file.py --name your_name --label "Your Display Name" --sizes 3-15
 ```
 
-`--sizes` can be a range, a single size, or a list — a submission doesn't
-have to cover every size. This only adds it if it actually passes at
-every size claimed; see `CONTRIBUTING.md` for the full workflow. Then run
+`--name` is the tidy filesystem-safe registry key (becomes
+`baselines/your_name.py`); `--label` is what actually shows on the
+leaderboard (defaults to `--name` if omitted). `--sizes` can be a range, a
+single size, or a list — a submission doesn't have to cover every size.
+This only adds it if it actually passes at every size claimed; see
+`CONTRIBUTING.md` for the full workflow. Then run
 `python3 scripts/update_leaderboard.py` and commit both alongside
 `LEADERBOARD.md`.
 

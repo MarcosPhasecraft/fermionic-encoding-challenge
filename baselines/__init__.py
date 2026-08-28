@@ -7,14 +7,18 @@ hand-edit registry.json directly; scripts/submit_baseline.py writes it
 after confirming a submission actually passes at every size it claims.
 
 BASELINES[name] = {"encode": encode_fn, "order": order_fn_or_None,
-                    "sizes": [int, ...], "module": "baselines.name"}
+                    "sizes": [int, ...], "module": "baselines.name",
+                    "label": "display name"}
 
 "order" is the module's own optional order(Lx, Ly) -> perm (None if it
 declares none, in which case harness.lattice.build_spec falls back to
 row_major). "module" is kept alongside "encode" so the leaderboard can link
 to the file that actually declares a baseline's identity even when its
 encode_fn is imported from elsewhere (see baselines/*_snake.py, which reuse
-another baseline's encode() under a different declared ordering).
+another baseline's encode() under a different declared ordering). "label"
+is the human-readable leaderboard display name a submitter chose via
+scripts/submit_baseline.py's --label (falls back to the registry name
+itself for entries registered before that option existed).
 """
 
 import importlib
@@ -35,6 +39,7 @@ def _load_registry() -> dict:
             "order": getattr(module, "order", None),
             "sizes": entry["sizes"],
             "module": entry["module"],
+            "label": entry.get("label", name),
         }
     return registry
 

@@ -4,6 +4,12 @@ promote it into baselines/ and register it in registry.json.
     python3 scripts/submit_baseline.py --file their_encode.py --name theirname --sizes 8
     python3 scripts/submit_baseline.py --file their_encode.py --name theirname --sizes 3-15
     python3 scripts/submit_baseline.py --file their_encode.py --name theirname   # sizes default to 3-15
+    python3 scripts/submit_baseline.py --file their_encode.py --name theirname --label "Their BK variant"
+
+--name is the tidy filesystem-safe registry key (becomes baselines/<name>.py);
+--label is what actually shows on the leaderboard (defaults to --name if
+omitted) -- kept separate so the leaderboard doesn't have to show a raw
+slug like "alice_bk_v2" for an external submission.
 
 Never touches baselines/ or registry.json unless the submission passes
 verify() at every claimed size, under the submission's own declared
@@ -79,6 +85,7 @@ def main():
     parser.add_argument("--file", required=True, help="path to the candidate encode.py")
     parser.add_argument("--name", required=True, help="registry name, e.g. 'my_solution'")
     parser.add_argument("--sizes", default=f"{MIN_SIZE}-{MAX_SIZE}", help="e.g. '8' or '3-15' or '8,10,12'")
+    parser.add_argument("--label", default=None, help="human-readable leaderboard display name (default: --name)")
     parser.add_argument("--force", action="store_true", help="overwrite an existing registry entry with this name")
     args = parser.parse_args()
 
@@ -100,13 +107,17 @@ def main():
 
     dest = REPO_ROOT / "baselines" / f"{args.name}.py"
     shutil.copy(args.file, dest)
-    registry[args.name] = {"module": f"baselines.{args.name}", "sizes": sizes}
+    registry[args.name] = {
+        "module": f"baselines.{args.name}",
+        "sizes": sizes,
+        "label": args.label or args.name,
+    }
     with open(REGISTRY_PATH, "w") as f:
         json.dump(registry, f, indent=2)
         f.write("\n")
 
     print(f"\nPASSED at every claimed size.")
-    print(f"Added baselines/{args.name}.py and updated registry.json.")
+    print(f"Added baselines/{args.name}.py and updated registry.json, labelled {registry[args.name]['label']!r}.")
     print("Now run: python3 scripts/update_leaderboard.py")
 
 

@@ -137,14 +137,19 @@ can be improved and compared.
 2. Test and register it in one step:
 
    ```bash
-   python3 scripts/submit_baseline.py --file your_file.py --name your_name --sizes 3-15
+   python3 scripts/submit_baseline.py --file your_file.py --name your_name --label "Your Display Name" --sizes 3-15
    ```
 
-   `--sizes` accepts a range (`3-15`), a single size (`8`), or a list
-   (`8,10,12`) — a submission doesn't have to cover the full range;
-   defaults to `3-15` if omitted. This checks `verify()` passes at *every*
-   claimed size under your declared `order()` (or `row_major`, if you
-   declared none), and only if everything passes does it copy the file to
+   `--name` is the tidy filesystem-safe registry key (becomes
+   `baselines/your_name.py` and the `registry.json` key); `--label` is the
+   human-readable name shown on the leaderboard instead (defaults to
+   `--name` if omitted — worth setting explicitly for an external
+   submission so it doesn't show up as a raw slug). `--sizes` accepts a
+   range (`3-15`), a single size (`8`), or a list (`8,10,12`) — a
+   submission doesn't have to cover the full range; defaults to `3-15` if
+   omitted. This checks `verify()` passes at *every* claimed size under
+   your declared `order()` (or `row_major`, if you declared none), and
+   only if everything passes does it copy the file to
    `baselines/your_name.py` and add it to `baselines/registry.json`. A
    failure explains exactly which size and why, and touches nothing. Never
    hand-edit `registry.json` directly.

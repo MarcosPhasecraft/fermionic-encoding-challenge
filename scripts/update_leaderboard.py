@@ -60,10 +60,13 @@ PAPER_MAX = {
 }
 # Which of our baselines.BASELINES names correspond to which paper row --
 # used to display our own row under the paper's own notation (JW, PB, not
-# the lowercase registry key). Anything registered under a name not listed
-# here just displays under its registry name. Parity/BK/TT each get two
-# entries (row_major, snake) since no single one of the built-in orderings
-# is best on both metrics for those three encodings -- see NOTES.md.
+# the lowercase registry key), overriding whatever "label" a registry entry
+# might carry. Anything registered under a name not listed here displays
+# under its own registry "label" (scripts/submit_baseline.py's --label,
+# defaulting to the registry name for entries registered before that
+# option existed). Parity/BK/TT each get two entries (row_major, snake)
+# since no single one of the built-in orderings is best on both metrics
+# for those three encodings -- see NOTES.md.
 PAPER_ROW_FOR = {
     "jw": "JW",
     "parity": "PB (row-major)",
@@ -105,7 +108,7 @@ def compute_our_entries():
     total_entries, max_entries = [], []
     for name, entry in BASELINES.items():
         encode_fn, order_fn, sizes = entry["encode"], entry["order"], entry["sizes"]
-        label = PAPER_ROW_FOR.get(name, name)
+        label = PAPER_ROW_FOR.get(name, entry["label"])
         link = source_link(entry["module"])
         totals, maxes = {}, {}
         for l in sizes:
