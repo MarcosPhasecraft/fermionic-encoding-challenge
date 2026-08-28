@@ -181,5 +181,26 @@
       15
     ],
     "label": "Geo Ternary (annealed)"
+  },
+  "geo_ternary_anneal_ensemble": {
+    "module": "baselines.geo_ternary_anneal_ensemble",
+    "sizes": [
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ],
+    "label": "Geo Ternary (annealed, 5x ensemble)",
+    "generated_by": "Claude Sonnet 5",
+    "submitted_at": "2026-08-28T16:15:55+00:00"
   }
 }
