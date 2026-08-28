@@ -211,3 +211,72 @@ JW wins outright on both metrics at this size — consistent with the
 paper's qualitative claim that JW is preferred for small grids, even
 though our absolute numbers differ from theirs for the reasons documented
 above.
+
+## Third and fourth baselines: Bravyi-Kitaev and ternary tree
+
+Both built via `harness/constructors.py`'s `from_linear_encoding(U)`, same
+as parity — only `U` differs, built by `baselines/bk.py`'s Fenwick-tree
+construction and `baselines/ternary.py`'s Sierpinski-tree construction
+respectively (both cross-checked against arXiv 2504.21636's released code,
+`hexaly_quadratic_assignment.py`'s `fenwick()`/`bk()` and
+`sierpinski()`/`tt()`). Needed a new shared helper,
+`harness/constructors.py`'s `transitive_closure(u)` (vectorized
+Floyd-Warshall-style relaxation, `k` outermost) — verified against a plain
+triple-loop on a random test matrix before trusting it.
+
+Both pass `verify()` across a broad range of `M` (including non-power-of-two
+and non-power-of-three sizes, since both constructions pad internally), and
+both degenerate to exactly JW's mapping at `M=1`, as expected.
+
+**BK's number-term weight has a clean closed form at exact powers of two**:
+`ceil(log2(M)) + 1`, matching a perfectly balanced Fenwick tree's height —
+verified exactly at `M = 1, 2, 4, 8, 16, 32, 64, 128`, and confirmed as a
+valid upper bound at every non-power-of-two `M` tested (padding can only
+shrink a mode's ancestor count relative to the fully-padded tree, never
+grow it). Ternary tree does *not* have an equally clean closed form — its
+recursion is asymmetric (the middle third's own children aren't wired
+directly to the outer thirds, only through the middle's own representative
+node), so its number-term weight grows log-like but not exactly
+`ceil(log3(M)) + 1`; a generous `2*ceil(log2(M)) + 2` envelope holds at
+every size checked (`tests/test_ternary.py`'s
+`test_num_weight_grows_log_like`).
+
+### Comparison against Table I (row_major/snake/diagonal, best-of-3)
+
+```
+bk total:       244, 531, 971, 1542, 2235, 3087, 4095, 5213, 6501, 7978, 9594, 11289, 13226
+paper BK total: 304, 635, 1107, 1712, 2473, 3331, 4467, 5741, 7127, 8850, 10438, 12595, 14522
+bk max:         5, 7, 9, 9, 11, 11, 12, 13, 13, 13, 14, 15, 15
+paper BK max:   5, 7, 9, 9, 11, 11, 12, 13, 13, 13, 14, 15, 15
+
+ternary total:       257, 532, 938, 1476, 2107, 2873, 3849, 4835, 5947, 7358, 8743, 10240, 12020
+paper TT total:      313, 628, 1080, 1676, 2375, 3237, 4303, 5473, 6799, 8342, 9853, 11844, 13942
+ternary max:         6, 6, 8, 10, 8, 9, 12, 10, 10, 12, 11, 11, 14
+paper TT max:        5, 5, 7, 7, 8, 8, 9, 9, 9, 10, 10, 10, 11
+```
+
+BK's max weight matches published **exactly at every single size** (13/13)
+and beats published total everywhere — as strong a confirmation as JW got.
+
+TT's max weight, unlike every other encoding checked so far, is *worse*
+than published at every size. Before trusting this, ran the same check
+used to validate JW/parity at `3×3`: an exhaustive search over all `9!`
+orderings, `verify()` included at every step.
+
+```
+true best total (3x3): 245, at permutation (0, 1, 2, 3, 6, 7, 4, 5, 8)
+true best max   (3x3): 5,   at the same permutation
+paper TT (3x3):        total=313, max=5
+```
+
+The true global optimum matches the paper's published max exactly (`5`)
+and beats its total (`245` vs `313`) — same pattern as every other
+encoding. So the earlier "worse at every size" result was an artifact of
+`row_major`/`snake`/`diagonal` being poorly suited to a genuinely
+tree-structured encoding (they were designed with linear-chain adjacency
+in mind, which is the right fit for JW/BK/PB's cost structure but not for
+TT's recursive-partition structure) — not a construction bug. TT is
+correct; its max-weight numbers on the leaderboard, unlike the other three
+encodings', likely have room to improve with a better-chosen ordering
+(the leaderboard's own preamble already flags this as a general caveat of
+the three-orderings-only methodology).

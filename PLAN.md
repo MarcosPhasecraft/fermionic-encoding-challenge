@@ -251,13 +251,24 @@ Their orderings come from a commercial solver, so exact ties are not required.
 | total Pauli weight | 9×9 | **10×10** | 10×10 |
 | Fermi–Hubbard total | 10×10 | **11×11** | 11×11 |
 
-**Progress so far** (JW only — `parity`/`bk`/`ternary` baselines still need
-to be built before the crossover structure itself can be checked): see
-`NOTES.md` for a full row-major-vs-published comparison across all 13
-sizes. Max Pauli weight is validated (matches published exactly for
-`L=3..8`, provably better from `L=9`). Total Pauli weight beats published
-everywhere checked, likely because their solver's search wasn't exhaustive
-— also in `NOTES.md`.
+**Progress so far**: all four baselines (JW, parity, BK, ternary tree) are
+now built; see `NOTES.md` for the full comparison against published Table I
+across all 13 sizes for each. Bravyi-Kitaev's max Pauli weight matches
+published exactly at every size — the cleanest validation of the four.
+Jordan-Wigner's matches published for `L=3..8`, provably better from `L=9`.
+Total Pauli weight beats published everywhere checked, for every encoding,
+likely because their solver's search wasn't exhaustive — also in
+`NOTES.md`.
+
+The qualitative crossover (JW favored for small grids, ternary tree for
+large ones) does reproduce using our own best-of-three-orderings numbers,
+but the exact crossover point wobbles (JW briefly retakes the lead at
+`9×9` before ternary tree wins from `10×10` on) rather than switching
+cleanly at `8×8` as the paper's own solver-optimized orderings show. This
+traces to the same limitation documented in `NOTES.md`: our restricted
+three-ordering search underperforms ternary tree's true optimum (confirmed
+via an exhaustive `9!` search at `3×3`), so its numbers here likely have
+more headroom than the other three baselines'.
 
 **Stage 1 is complete when Tests 1–4 pass.** Report results and stop.
 
@@ -328,7 +339,13 @@ parameterization and hand back canonical form:
   opposite order — disproven by requiring `from_linear_encoding(I)` to
   reproduce `baselines/jw.py` exactly; see `tests/test_constructors.py`.)
   Reference: arXiv 2504.21636 eq. (18).
-- `from_ternary_tree(tree)` — Pauli labels along root-to-leaf paths.
+- Ternary tree and Bravyi-Kitaev turned out not to need a separate
+  constructor: both are expressible as `from_linear_encoding(U)` with `U`
+  built from a recursive tree structure (Sierpinski/Fenwick respectively,
+  see `baselines/ternary.py`/`bk.py`'s `tt_matrix`/`bk_matrix`) plus a
+  shared `harness/constructors.py` helper, `transitive_closure(u)`, rather
+  than a bespoke "labels along root-to-leaf paths" constructor as originally
+  envisioned here.
 - `apply_clifford(mapping, ops)` — Clifford conjugation preserves the Majorana
   algebra, so any conjugated valid mapping is valid by construction.
 - `permute_modes(mapping, sigma)`.
@@ -359,9 +376,9 @@ encoding-bench/
     evaluate.py           encode_fn -> verify -> score combinator (built ahead of Stage 2)
     constructors.py       from_linear_encoding() etc (built ahead of Stage 2)
   baselines/              FROZEN
-    __init__.py           BASELINES = {"jw": jw.encode, "parity": parity.encode, ...}
-    jw.py  parity.py                    -- built
-    bk.py  ternary.py                   -- not yet built
+    __init__.py           builds BASELINES from registry.json
+    registry.json         {"name": {"module": ..., "sizes": [...]}} manifest
+    jw.py  parity.py  bk.py  ternary.py -- all built
   tests/
     test_chain_analytic.py
     test_rejection.py

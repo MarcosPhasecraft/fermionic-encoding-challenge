@@ -34,6 +34,27 @@ def _invert_gf2(u: np.ndarray) -> np.ndarray:
     return augmented[:, n:]
 
 
+def transitive_closure(u: np.ndarray) -> np.ndarray:
+    """Reflexive-free transitive closure of the reachability relation given
+    by u (u[r, c] = 1 meaning a direct edge r -> c): afterward, u[r, c] = 1
+    iff c is reachable from r via one or more edges. Used to build the
+    Bravyi-Kitaev and ternary-tree encoding matrices from their recursive
+    Fenwick/Sierpinski edge structure (see baselines/bk.py, ternary.py).
+
+    Vectorized Floyd-Warshall-style OR-of-AND relaxation, k outermost --
+    required for correctness (each pass through a fixed k propagates one
+    more hop through it), and for a fixed k neither row k nor column k
+    changes during that pass (U[k,k] is always 0 here, so the update is a
+    no-op there), so computing each k's whole (r, c) batch from that pass's
+    starting state, all at once, is exactly equivalent to updating one
+    (r, c) at a time in any order.
+    """
+    u = u.astype(np.uint8).copy()
+    for k in range(u.shape[0]):
+        u |= np.outer(u[:, k], u[k, :])
+    return u
+
+
 def from_linear_encoding(u: np.ndarray) -> dict:
     n = u.shape[0]
     f = _invert_gf2(u)

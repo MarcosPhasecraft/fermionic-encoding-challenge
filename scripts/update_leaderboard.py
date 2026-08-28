@@ -57,7 +57,7 @@ PAPER_MAX = {
 # used to display our own row under the paper's own notation (JW, PB, not
 # the lowercase registry key). Anything registered under a name not listed
 # here just displays under its registry name.
-PAPER_ROW_FOR = {"jw": "JW", "parity": "PB"}
+PAPER_ROW_FOR = {"jw": "JW", "parity": "PB", "bk": "BK", "ternary": "TT"}
 
 
 def source_link(encode_fn) -> str:

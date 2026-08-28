@@ -28,23 +28,30 @@ agent, no search) is well underway. Currently working:
 - Hamiltonian term-list construction (hopping, number, interaction), with a
   genuinely complex hopping coefficient per arXiv 2504.21636 eq. 10
 - Pauli-weight scoring (total, max, average)
-- Two baseline encodings: Jordan-Wigner and parity basis, both built from a
-  single general linear-encoding constructor
+- Four baseline encodings: Jordan-Wigner, parity basis, Bravyi-Kitaev, and
+  ternary tree, all but JW built from a single general linear-encoding
+  constructor
 - The `run.py evaluate` CLI and `results.tsv` logging
-- 44 passing tests
+- 99 passing tests
+- `scripts/submit_baseline.py` (test + register a new baseline) and
+  `scripts/update_leaderboard.py` (regenerate `LEADERBOARD.md`)
 
 An extensive investigation validated this against arXiv 2504.21636's
-published Table I: our Jordan-Wigner implementation's max Pauli weight
-exactly matches their published values for `3×3` through `8×8` grids (and
-provably beats them beyond that), and our total Pauli weight beats their
-published values at every grid size checked. Full details, including two
-real bugs found and fixed along the way, are in `NOTES.md`.
+published Table I: our Bravyi-Kitaev max Pauli weight exactly matches
+their published values at every one of the 13 grid sizes checked; our
+Jordan-Wigner max Pauli weight matches for `3×3` through `8×8` (and
+provably beats them beyond that); our total Pauli weight beats their
+published values everywhere, for every encoding. Ternary tree's max Pauli
+weight, unlike the other three, comes out *worse* than published at every
+size under our three built-in orderings — an exhaustive `9!` search at
+`3×3` confirmed this is a limitation of that restricted ordering search,
+not a construction bug (the true optimum matches published exactly). Full
+details, including real bugs found and fixed along the way, are in
+`NOTES.md`.
 
-Not yet built: Bravyi-Kitaev and ternary-tree baselines, stabilizer support,
-and the ordering/Table-I tests aren't yet formalized as pytest files (the
-underlying validation work is done; see `NOTES.md`). No hosted
-leaderboard/submission service exists yet — see `README.md`'s "How to
-play" for the current, local-only workflow.
+Not yet built: stabilizer support. No hosted leaderboard/submission
+service exists yet — see `README.md`'s "How to play" for the current,
+local-only workflow.
 
 ## Code structure
 
@@ -68,9 +75,13 @@ harness/            FROZEN — the trusted core; nothing here should change
                      encoding constructor; baselines build on this
 
 baselines/           FROZEN — trusted reference implementations
-  __init__.py        BASELINES = {"jw": ..., "parity": ...} registry, by name
+  __init__.py        builds BASELINES from registry.json, by name
+  registry.json       {"name": {"module": ..., "sizes": [...]}} manifest --
+                     never hand-edit; scripts/submit_baseline.py writes it
   jw.py              Jordan-Wigner
   parity.py          Parity basis (dual to Jordan-Wigner)
+  bk.py              Bravyi-Kitaev (Fenwick-tree linear encoding)
+  ternary.py         Ternary tree (Sierpinski-tree linear encoding)
 
 solution/            EDITABLE -- a submission's encode(spec) -> mapping goes
                      here; ships as an unfilled NotImplementedError stub,

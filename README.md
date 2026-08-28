@@ -80,9 +80,9 @@ three built-in orderings — not an exhaustive search over every possible
 ordering, so there may be room to improve a listed number just by trying
 a different ordering, not only by writing a new encoding.
 
-The open ground is genuinely open: different lattice shapes, and
-encodings nobody has implemented here yet (Bravyi-Kitaev, ternary tree,
-and the much larger space beyond those four well-known points).
+The open ground is genuinely open: different lattice shapes, better
+orderings for the encodings already here, and the much larger space of
+encodings beyond JW, parity basis, Bravyi-Kitaev, and ternary tree.
 
 **Found something better?**
 

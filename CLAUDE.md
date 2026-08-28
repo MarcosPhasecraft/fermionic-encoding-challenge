@@ -103,10 +103,13 @@ sizes, not by code review, so don't rely on a submission "looking" uniform.
 - Report metrics as a vector (`total_weight`, `max_weight`, `avg_weight`,
   `n_qubits`); never collapse them into one scalar (e.g. `N × weight`) — see
   PLAN.md §1.6 for why.
-- Every new `baselines/*.py` module needs an entry in `baselines/__init__.py`'s
-  `BASELINES` dict (`{"name": module.encode}`) so cross-encoding comparisons
-  (Test 4, and any future sweep) can loop over all baselines by name instead
-  of importing each module by hand.
+- Every new `baselines/*.py` module needs an entry in `baselines/registry.json`
+  (`{"name": {"module": ..., "sizes": [...]}}`, read by `baselines/__init__.py`
+  into `BASELINES`) so cross-encoding comparisons (Test 4, the leaderboard,
+  and any future sweep) can loop over all baselines by name instead of
+  importing each module by hand. Never hand-edit `registry.json` directly —
+  `scripts/submit_baseline.py` writes it only after confirming the submission
+  passes at every size it claims.
 - `run.py evaluate --solution ... --lx ... --ly ...` is the actual
   contributor-facing entry point (modeled on `ecdsafail run --note`) — it
   loads an `encode(spec)` from any file path, runs it through `evaluate()`,

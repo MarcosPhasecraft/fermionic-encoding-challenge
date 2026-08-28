@@ -1,4 +1,74 @@
 {
-  "jw": {"module": "baselines.jw", "sizes": [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]},
-  "parity": {"module": "baselines.parity", "sizes": [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]}
+  "jw": {
+    "module": "baselines.jw",
+    "sizes": [
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ]
+  },
+  "parity": {
+    "module": "baselines.parity",
+    "sizes": [
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ]
+  },
+  "bk": {
+    "module": "baselines.bk",
+    "sizes": [
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ]
+  },
+  "ternary": {
+    "module": "baselines.ternary",
+    "sizes": [
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ]
+  }
 }
