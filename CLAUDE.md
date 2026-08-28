@@ -31,7 +31,13 @@ Three markdown files, three different jobs. Don't blur them:
 
 - `harness/` and `baselines/` are **frozen** once Stage 1 is signed off. Do
   not modify them to make a submission pass — that defeats the point of a
-  trusted referee.
+  trusted referee. One exception within `baselines/`: a `<name>.memory/`
+  folder (an accepted submission's optional notes on what was tried,
+  ECDSA-style shared memory — see `NOTES.md`) is committed alongside its
+  baseline but isn't part of the "frozen, trusted" property everything
+  else there has. It's unverified prose a submitter chose to write, not
+  code the harness runs or `verify()` ever looks at — don't trust a
+  baseline's memory notes over its own actual behavior.
 - `solution/` is the only editable directory, and only from Stage 2 onward.
 - `inbox/` is a maintainer-facing staging area for external submissions
   (gitignored except `inbox/README.md`) — not part of the frozen/editable

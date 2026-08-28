@@ -34,7 +34,11 @@ machine's clock -- never taken from the submission itself -- and
 generated_by copied through if given), and its inbox folder is moved to
 inbox/_processed/<timestamp>_<name>/ (e.g. 20260828-144437_alice_bk/) --
 sortable by acceptance order, a local record of exactly what was
-submitted.
+submitted. An optional inbox/<dir>/memory/ folder (notes on what was
+tried -- see inbox/README.md) is carried into the committed record too,
+at baselines/<name>.memory/, exactly like ecdsa.fail's own shared memory
+notes; unlike everything else in baselines/, it's unverified prose, not
+code the harness runs, so treat it as leads rather than proven fact.
 
 If anything was newly accepted this run: LEADERBOARD.md is regenerated
 (scripts/update_leaderboard.py, run as a fresh subprocess so it reads the
@@ -82,6 +86,23 @@ PROCESSED = INBOX / "_processed"
 _IGNORED_DIR_NAMES = {"_processed", "__pycache__"}
 
 
+def _files_touched(accepted: list[dict], skip_leaderboard: bool) -> list[str]:
+    """Repo-relative paths this run actually wrote, for git add -- pulled
+    out into its own function specifically so it's unit-testable, since
+    none of the "none"-answer end-to-end tests ever exercise the git path
+    at all (and a memory folder missing from this list would silently
+    stay untracked forever even after answering "commit").
+    """
+    touched = ["baselines/registry.json"]
+    if not skip_leaderboard:
+        touched += ["LEADERBOARD.md", "MEMORY.md"]
+    for r in accepted:
+        touched.append(f"baselines/{r['name']}.py")
+        if r["has_memory"]:
+            touched.append(f"baselines/{r['name']}.memory")
+    return touched
+
+
 def _pending_submission_dirs() -> list[Path]:
     if not INBOX.is_dir():
         return []
@@ -124,6 +145,16 @@ def _process_one(folder: Path, registry: dict) -> dict:
 
         dest = submission_lib.BASELINES_DIR / f"{name}.py"
         shutil.copy(encode_path, dest)
+
+        # Optional: notes on what was tried, carried into the committed
+        # record alongside the code itself (ECDSA-style shared memory --
+        # see inbox/README.md). Purely additive: doesn't affect anything
+        # verify()/check_at_size decided above.
+        memory_dir = folder / "memory"
+        has_memory = memory_dir.is_dir()
+        if has_memory:
+            shutil.copytree(memory_dir, submission_lib.BASELINES_DIR / f"{name}.memory")
+
         now = datetime.now(timezone.utc)
         submitted_at = now.isoformat(timespec="seconds")
         registry[name] = registry_entry(
@@ -143,7 +174,7 @@ def _process_one(folder: Path, registry: dict) -> dict:
 
         return {"name": name, "label": manifest["label"], "accepted": True,
                 "scores": scores, "submitted_at": submitted_at,
-                "generated_by": manifest.get("generated_by")}
+                "generated_by": manifest.get("generated_by"), "has_memory": has_memory}
 
     except SubmissionRejected as e:
         return {"name": folder.name, "accepted": False, "reason": str(e)}
@@ -201,7 +232,7 @@ def main():
         if test_result.returncode != 0:
             print("\n*** TEST SUITE FAILED -- review before committing. ***")
 
-    touched = ["baselines/registry.json", "LEADERBOARD.md"] + [f"baselines/{r['name']}.py" for r in accepted]
+    touched = _files_touched(accepted, args.skip_leaderboard)
     print("\nFiles touched this run:")
     for f in touched:
         print(f"  {f}")

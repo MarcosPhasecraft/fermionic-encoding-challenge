@@ -7,6 +7,8 @@ in this exact shape:
 <any-folder-name>/
   encode.py         # def encode(spec) -> mapping; optional def order(Lx, Ly) -> perm
   submission.json   # {"name": "...", "label": "...", "sizes": "3-15"}
+  memory/           # OPTIONAL -- notes on what was tried (see below)
+    <any-name>.md
 ```
 
 Then it's two steps on your end: drop that folder straight into `inbox/`
@@ -63,6 +65,22 @@ before ever executing a line of it.
 See the top-level `README.md`'s "How to play" section for the full
 `encode(spec)`/`order(Lx, Ly)` contract.
 
+## `memory/` (optional)
+
+A folder of markdown notes on what was tried and why — what worked, what
+plateaued, what a parameter tuned out to be. Entirely optional, and not
+part of what gets verified: `verify()`/`check_at_size` never look at it.
+If present, it's carried into the committed record alongside the code,
+at `baselines/<name>.memory/`, and indexed in the top-level `MEMORY.md` so
+future contestants can read what's already been tried before starting
+their own attempt — the same thing ecdsa.fail's own shared
+`src/point_add/memory/` notes are for. Same caveat as theirs, though:
+this is unverified prose a submitter chose to write, not code the harness
+runs — treat it as leads, not proven fact.
+
+If it's not included, nothing happens — no empty folder, no entry in
+`MEMORY.md`.
+
 ## Running the pipeline
 
 ```bash
@@ -78,7 +96,7 @@ if a submission passes, registers it and moves its folder to
 `encode.py` are archived there unchanged). A submission that fails is left
 exactly where it is — fix it and run the command again.
 
-If anything was accepted, the script regenerates `LEADERBOARD.md`, re-runs
-the test suite, prints a summary, and only then asks you — on the
-terminal, not through an AI — whether to push, commit locally, or do
-neither.
+If anything was accepted, the script regenerates `LEADERBOARD.md` and
+`MEMORY.md`, re-runs the test suite, prints a summary, and only then asks
+you — on the terminal, not through an AI — whether to push, commit
+locally, or do neither.

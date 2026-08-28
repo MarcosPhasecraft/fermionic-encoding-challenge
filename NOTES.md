@@ -381,3 +381,40 @@ folders (matching the format `scripts/process_inbox.py` produces for a
 real submission) were created for all ten pre-existing baselines too, so
 every registered encoding — however it actually arrived historically —
 has the same uniform local record.
+
+## Shared "lessons learned" memory, ECDSA-style
+
+Noticed while looking into this: `geo_ternary_opt.py`, `geo_ternary_anneal.py`,
+and `geo_ternary_anneal_ensemble.py` all reference `solution/memory/max_weight_search.md`
+/ `solution/memory/total_weight_search.md` in their docstrings, as if those
+files exist. They don't — `solution/memory/` in this repo is empty (just a
+`.gitkeep`). Whatever was actually tried building those three was local to
+wherever they were generated and never became part of the shared repo;
+only the docstring narrative survived. **Still unresolved** — the content
+was never sent to us, so it can't be reconstructed without fabricating
+it. If the original files ever turn up, add them by hand to
+`baselines/geo_ternary_opt.memory/` / `baselines/geo_ternary_anneal.memory/`
+the same way the registry backfill above was done for other metadata.
+
+ecdsa.fail's own answer to "how do future contestants learn from past
+attempts" (confirmed from their README): `src/point_add/memory/` is
+shared, git-tracked, and accumulating — contributors add notes as they
+iterate, committed as real repo history, with an explicit caveat:
+*"memory and source files may come from different agents. Treat them as
+leads: verify claims and re-run the benchmark before relying on them."*
+
+Adapted rather than copied exactly, since the structural fit differs:
+ECDSA has one continuously-evolving solution with one shared memory pool;
+this repo has many independently-authored, permanently-named baselines.
+So memory here is scoped **per baseline** — an optional `memory/` folder
+in a submission (`inbox/README.md`), carried by `scripts/process_inbox.py`
+into `baselines/<name>.memory/` on acceptance (purely additive; doesn't
+touch `verify()`/`check_at_size`/registration at all) — rather than one
+shared pool, but keeps ECDSA's actual properties: committed, permanent,
+optional, and explicitly "leads not proven fact."
+
+Discoverability without cluttering `LEADERBOARD.md`'s cells (an explicit
+prior preference — see the earlier `generated_by` note): a separate
+generated `MEMORY.md`, written by `scripts/update_leaderboard.py`
+alongside the score tables, listing only baselines that actually have a
+`.memory/` folder — nothing for the rest, no "no notes" filler rows.

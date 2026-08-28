@@ -142,3 +142,63 @@ def test_save_and_load_cache_roundtrip(tmp_path, monkeypatch):
     data = {"_harness_fingerprint": "abc", "entries": {"jw": {"fingerprint": "x", "scores": {}}}}
     update_leaderboard._save_cache(data)
     assert update_leaderboard._load_cache() == data
+
+
+# --- collect_memory_entries / write_memory_index ---
+
+
+def test_collect_memory_entries_only_lists_baselines_with_a_memory_folder(tmp_path):
+    (tmp_path / "alice.memory").mkdir()
+    (tmp_path / "alice.memory" / "notes.md").write_text("# notes\n")
+    (tmp_path / "bob.py").write_text("")  # no bob.memory/ at all
+
+    entries = update_leaderboard.collect_memory_entries(
+        tmp_path, [("alice", "Alice's Encoding"), ("bob", "Bob's Encoding")],
+    )
+
+    assert entries == [("alice", "Alice's Encoding", ["notes.md"])]
+
+
+def test_collect_memory_entries_ignores_an_empty_memory_folder(tmp_path):
+    (tmp_path / "alice.memory").mkdir()  # exists but no files in it
+
+    entries = update_leaderboard.collect_memory_entries(tmp_path, [("alice", "Alice's Encoding")])
+
+    assert entries == []
+
+
+def test_collect_memory_entries_lists_multiple_files_sorted(tmp_path):
+    memory_dir = tmp_path / "alice.memory"
+    memory_dir.mkdir()
+    (memory_dir / "z_later.md").write_text("")
+    (memory_dir / "a_first.md").write_text("")
+
+    entries = update_leaderboard.collect_memory_entries(tmp_path, [("alice", "Alice's Encoding")])
+
+    assert entries == [("alice", "Alice's Encoding", ["a_first.md", "z_later.md"])]
+
+
+def test_write_memory_index_links_to_the_right_files(tmp_path):
+    memory_dir = tmp_path / "baselines" / "alice.memory"
+    memory_dir.mkdir(parents=True)
+    (memory_dir / "notes.md").write_text("")
+    out_path = tmp_path / "MEMORY.md"
+
+    update_leaderboard.write_memory_index(out_path, tmp_path / "baselines", [("alice", "Alice's Encoding")])
+
+    content = out_path.read_text()
+    assert "Alice's Encoding" in content
+    assert "`alice`" in content
+    assert "baselines/alice.memory/notes.md" in content
+    assert "leads, not proven fact" in content  # the ECDSA-style caveat
+
+
+def test_write_memory_index_omits_baselines_without_notes(tmp_path):
+    (tmp_path / "baselines").mkdir()
+    out_path = tmp_path / "MEMORY.md"
+
+    update_leaderboard.write_memory_index(out_path, tmp_path / "baselines", [("bob", "Bob's Encoding")])
+
+    content = out_path.read_text()
+    assert "Bob's Encoding" not in content
+    assert "Nothing here yet" in content

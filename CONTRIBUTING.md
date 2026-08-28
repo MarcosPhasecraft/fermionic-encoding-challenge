@@ -96,6 +96,9 @@ baselines/           FROZEN — trusted reference implementations
   bk_snake.py        Same encode() as bk.py, order = snake instead
   ternary.py         Ternary tree (Sierpinski-tree linear encoding), order = row_major
   ternary_snake.py   Same encode() as ternary.py, order = snake instead
+  <name>.memory/     OPTIONAL, per baseline -- notes on what was tried,
+                     carried in from a submission's own memory/ folder;
+                     unverified prose, not code the harness runs
 
 solution/            EDITABLE -- a submission's encode(spec) -> mapping goes
                      here; ships as an unfilled NotImplementedError stub,
@@ -114,8 +117,9 @@ scripts/
                      verifies, registers, regenerates the leaderboard,
                      re-runs the test suite, then asks you (not an AI) on
                      the terminal whether to commit/push
-  update_leaderboard.py  regenerates LEADERBOARD.md from every registered
-                     baseline
+  update_leaderboard.py  regenerates LEADERBOARD.md and MEMORY.md (the
+                     latter an index of every baseline that shipped with
+                     a memory/ folder) from every registered baseline
 
 tests/               pytest suite
 examples/            Hand-written spec/mapping JSON for run.py's debug path
@@ -208,6 +212,12 @@ it does *not* do is write a bespoke `tests/test_<name>.py` the way step 3
 above describes; that still requires reading and understanding the
 submission, which isn't something to mechanize. If a submission is
 interesting enough to want that, add it by hand afterward.
+
+A submission's folder may also include an optional `memory/` — markdown
+notes on what was tried, ECDSA-style shared memory (see `inbox/README.md`
+and `MEMORY.md`). Carried into `baselines/<name>.memory/` on acceptance
+and indexed automatically; not part of what `verify()` checks, and
+explicitly unverified prose, not code the harness runs.
 
 If anything was accepted, the script's very last step prompts you, right
 there on the terminal, whether to push to GitHub, commit locally only, or

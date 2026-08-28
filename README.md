@@ -83,7 +83,9 @@ just by declaring a better ordering, not only by writing a new encoding.
 
 The open ground is genuinely open: different lattice shapes, better
 orderings for the encodings already here, and the much larger space of
-encodings beyond JW, parity basis, Bravyi-Kitaev, and ternary tree.
+encodings beyond JW, parity basis, Bravyi-Kitaev, and ternary tree. See
+[`MEMORY.md`](MEMORY.md) for notes past submitters left on what they
+tried — unverified, but a real head start over starting from nothing.
 
 **Found something better?**
 
@@ -93,13 +95,17 @@ Package it as one self-contained folder:
 <any-folder-name>/
   encode.py         # def encode(spec) -> mapping; optional def order(Lx, Ly) -> perm
   submission.json   # {"name": "...", "label": "...", "sizes": "3-15"}
+  memory/           # OPTIONAL -- notes on what you tried, welcome but not required
 ```
 
 and hand that whole folder — as one unit, not just the `.py` file — to
 whoever maintains this repo. `submission.json`'s exact schema is in
 `inbox/README.md`; the short version is `name` (a filesystem-safe
 identifier), `label` (what shows on the leaderboard), and `sizes` (which
-grids it claims to be valid for), all required.
+grids it claims to be valid for), all required. If you include a `memory/`
+folder of markdown notes on what worked and what didn't, it's carried
+into the accepted record and indexed in `MEMORY.md` for the next person
+to learn from — the same idea as ecdsa.fail's own shared memory notes.
 
 On their end, registering it is one command —
 `python3 scripts/process_inbox.py`, run after dropping your folder into

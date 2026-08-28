@@ -13,11 +13,16 @@ import scripts.process_inbox as process_inbox
 import scripts.submission_lib as submission_lib
 
 
-def _write_submission(inbox_dir, folder_name, name, label, sizes="3", encode_source=None):
+def _write_submission(inbox_dir, folder_name, name, label, sizes="3", encode_source=None, memory_files=None):
     folder = inbox_dir / folder_name
     folder.mkdir(parents=True)
     (folder / "encode.py").write_text(encode_source or "from baselines.jw import encode\n")
     (folder / "submission.json").write_text(json.dumps({"name": name, "label": label, "sizes": sizes}))
+    if memory_files:
+        memory_dir = folder / "memory"
+        memory_dir.mkdir()
+        for filename, content in memory_files.items():
+            (memory_dir / filename).write_text(content)
     return folder
 
 
@@ -93,3 +98,54 @@ def test_empty_inbox_is_a_noop(tmp_path, monkeypatch, capsys):
     _isolate(tmp_path, monkeypatch)
     process_inbox.main()
     assert "nothing pending" in capsys.readouterr().out
+
+
+def test_accepted_submission_with_memory_folder_carries_it_into_baselines(tmp_path, monkeypatch):
+    baselines_dir, registry_path, inbox_dir = _isolate(tmp_path, monkeypatch)
+    _write_submission(
+        inbox_dir, "sub_1", "pytest_smoke_memory", "Pytest Smoke (with memory)",
+        memory_files={"notes.md": "# what I tried\n"},
+    )
+
+    process_inbox.main()
+
+    memory_dir = baselines_dir / "pytest_smoke_memory.memory"
+    assert memory_dir.is_dir()
+    assert (memory_dir / "notes.md").read_text() == "# what I tried\n"
+
+
+def test_accepted_submission_without_memory_folder_creates_none(tmp_path, monkeypatch):
+    baselines_dir, registry_path, inbox_dir = _isolate(tmp_path, monkeypatch)
+    _write_submission(inbox_dir, "sub_1", "pytest_smoke_no_memory", "Pytest Smoke (no memory)")
+
+    process_inbox.main()
+
+    # The optional path must be a true no-op, not an empty dir everywhere.
+    assert not (baselines_dir / "pytest_smoke_no_memory.memory").exists()
+
+
+# --- _files_touched: none of the "none"-answer tests above ever exercise
+# the git-add path, so this is unit tested directly -- a memory folder
+# missing from this list would silently stay untracked even after
+# answering "commit".
+
+
+def test_files_touched_includes_memory_folder_when_present():
+    accepted = [{"name": "alice", "has_memory": True}]
+    touched = process_inbox._files_touched(accepted, skip_leaderboard=False)
+    assert "baselines/alice.memory" in touched
+    assert "baselines/alice.py" in touched
+
+
+def test_files_touched_omits_memory_folder_when_absent():
+    accepted = [{"name": "bob", "has_memory": False}]
+    touched = process_inbox._files_touched(accepted, skip_leaderboard=False)
+    assert "baselines/bob.memory" not in touched
+    assert "baselines/bob.py" in touched
+
+
+def test_files_touched_omits_leaderboard_and_memory_index_when_skipped():
+    accepted = [{"name": "alice", "has_memory": False}]
+    touched = process_inbox._files_touched(accepted, skip_leaderboard=True)
+    assert "LEADERBOARD.md" not in touched
+    assert "MEMORY.md" not in touched
