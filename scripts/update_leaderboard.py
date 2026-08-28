@@ -19,10 +19,12 @@ Run this after adding or improving a baseline. LEADERBOARD.md is a
 generated artifact -- never hand-edit it.
 """
 
+import inspect
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
+REPO_ROOT = Path(__file__).parent.parent.resolve()
+sys.path.insert(0, str(REPO_ROOT))
 
 from baselines import BASELINES
 from harness.evaluate import evaluate
@@ -46,11 +48,23 @@ PAPER_MAX = {
     "PB": [5, 6, 7, 8, 9, 10, 12, 13, 14, 15, 17, 18, 20],
     "TT": [5, 5, 7, 7, 8, 8, 9, 9, 9, 10, 10, 10, 11],
 }
-# Which of our baselines.BASELINES names correspond to which paper row, so
-# the two can be shown adjacent for direct comparison. Anything registered
-# under a name not listed here (e.g. a genuinely new encoding) just gets no
+# Which of our baselines.BASELINES names correspond to which paper row --
+# used both to display our own row under the paper's own notation (JW, PB,
+# not the lowercase registry key) and to place the two rows adjacent for
+# direct comparison. Anything registered under a name not listed here (e.g.
+# a genuinely new encoding) just displays under its registry name, with no
 # paper row next to it -- correctly, since the paper has no data for it.
 PAPER_ROW_FOR = {"jw": "JW", "parity": "PB"}
+
+
+def source_link(encode_fn) -> str:
+    """Repo-relative path to the file defining encode_fn, for a markdown
+    link straight to the actual submission -- works for anything in
+    BASELINES, not just these two, since it just asks Python where the
+    function's code lives rather than hardcoding paths per baseline.
+    """
+    path = Path(inspect.getsourcefile(encode_fn)).resolve()
+    return path.relative_to(REPO_ROOT).as_posix()
 
 
 def best_over_orderings(encode_fn, lx, ly):
@@ -70,8 +84,9 @@ def best_over_orderings(encode_fn, lx, ly):
 
 
 def compute_our_rows():
-    totals, maxes = {}, {}
+    totals, maxes, labels = {}, {}, {}
     for name, encode_fn in BASELINES.items():
+        labels[name] = (PAPER_ROW_FOR.get(name, name), source_link(encode_fn))
         totals[name], maxes[name] = [], []
         for l in SIZES:
             total, max_weight = best_over_orderings(encode_fn, l, l)
@@ -79,10 +94,10 @@ def compute_our_rows():
             maxes[name].append(max_weight)
         print(f"{name}: total={totals[name]}")
         print(f"{name}: max={maxes[name]}")
-    return totals, maxes
+    return totals, maxes, labels
 
 
-def render_table(f, title, formula, our_rows, paper_rows):
+def render_table(f, title, formula, our_rows, paper_rows, row_labels):
     f.write(f"## {title}\n\n")
     f.write(f"`{formula}`\n\n")
     header = " | ".join(f"{l}×{l}" for l in SIZES)
@@ -91,8 +106,9 @@ def render_table(f, title, formula, our_rows, paper_rows):
 
     seen_paper_rows = set()
     for name in our_rows:
+        label, link = row_labels[name]
         values = " | ".join(str(v) for v in our_rows[name])
-        f.write(f"| **{name}** (ours) | {values} |\n")
+        f.write(f"| **[{label}]({link})** (ours) | {values} |\n")
         paper_key = PAPER_ROW_FOR.get(name)
         if paper_key:
             values = " | ".join(str(v) for v in paper_rows[paper_key])
@@ -108,9 +124,9 @@ def render_table(f, title, formula, our_rows, paper_rows):
 
 
 def main():
-    our_totals, our_maxes = compute_our_rows()
+    our_totals, our_maxes, row_labels = compute_our_rows()
 
-    leaderboard_path = Path(__file__).parent.parent / "LEADERBOARD.md"
+    leaderboard_path = REPO_ROOT / "LEADERBOARD.md"
     with open(leaderboard_path, "w") as f:
         f.write("# Leaderboard -- square grids, 3x3 to 15x15\n\n")
         f.write(
@@ -127,11 +143,11 @@ def main():
         )
         render_table(
             f, "Total Pauli weight", "D = Num + ReHop + ImHop + Inter",
-            our_totals, PAPER_TOTAL,
+            our_totals, PAPER_TOTAL, row_labels,
         )
         render_table(
             f, "Maximum Pauli weight", "D = max(Num, ReHop, ImHop, Inter)",
-            our_maxes, PAPER_MAX,
+            our_maxes, PAPER_MAX, row_labels,
         )
 
     print(f"wrote {leaderboard_path}")
