@@ -4,9 +4,12 @@ import math
 
 import pytest
 
-from baselines.bk import bk_matrix, encode
+from baselines.bk import bk_matrix, encode, order
+from baselines.bk_snake import encode as snake_encode
+from baselines.bk_snake import order as snake_order
 from baselines.jw import encode as jw_encode
 from harness.constructors import _invert_gf2
+from harness.lattice import row_major_perm, snake_perm
 from harness.verify import verify
 
 
@@ -56,3 +59,14 @@ def test_num_weight_bounded_by_next_power_of_two(m):
     f = _invert_gf2(bk_matrix(m))
     max_num_weight = max(int(row.sum()) for row in f)
     assert max_num_weight <= math.ceil(math.log2(padded)) + 1
+
+
+def test_declared_ordering_is_row_major():
+    assert order(3, 3) == row_major_perm(3, 3)
+
+
+def test_snake_variant_declares_snake_and_reuses_the_same_encode():
+    # bk_snake.py is a thin wrapper: same encoding, different declared
+    # ordering -- prove it's actually the same function, not a duplicate.
+    assert snake_encode is encode
+    assert snake_order(3, 3) == snake_perm(3, 3)

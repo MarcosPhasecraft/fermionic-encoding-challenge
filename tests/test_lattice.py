@@ -5,7 +5,7 @@ investigation (PLAN.md Sec 1.7 Test 3/4) but never captured as real tests.
 
 import pytest
 
-from harness.lattice import hamiltonian, rectangle
+from harness.lattice import build_spec, hamiltonian, rectangle, snake_perm
 
 
 def test_row_major_indices():
@@ -54,6 +54,20 @@ def test_unknown_model_raises():
     spec = rectangle(2, 1)
     with pytest.raises(ValueError):
         hamiltonian(spec, model="not-a-real-model")
+
+
+def test_build_spec_defaults_to_row_major_without_an_order_fn():
+    assert build_spec(3, 3, order_fn=None) == rectangle(3, 3, ordering="row_major")
+
+
+def test_build_spec_uses_a_submission_supplied_order_fn():
+    # build_spec always goes through ordering="custom" internally (hence the
+    # "name" field differs from a direct rectangle(ordering="snake") call),
+    # but the actual geometry -- coords, edges -- must match exactly.
+    built = build_spec(3, 3, order_fn=snake_perm)
+    direct = rectangle(3, 3, ordering="snake")
+    assert built["coords"] == direct["coords"]
+    assert built["edges"] == direct["edges"]
 
 
 def test_term_counts_per_model():

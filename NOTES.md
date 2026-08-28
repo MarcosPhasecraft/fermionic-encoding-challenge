@@ -280,3 +280,43 @@ correct; its max-weight numbers on the leaderboard, unlike the other three
 encodings', likely have room to improve with a better-chosen ordering
 (the leaderboard's own preamble already flags this as a general caveat of
 the three-orderings-only methodology).
+
+## Submissions declare their own ordering, instead of the harness searching three
+
+The original leaderboard design (see the two sections above) had the
+harness itself try all three built-in orderings per baseline and report,
+independently, the best total and the best max. Checking each baseline's
+full per-ordering breakdown (not just the best-of-three summary) surfaced
+that this was quietly mixing runs:
+
+```
+jw:       row_major jointly optimal on both metrics at every size (closed form above)
+parity:   row_major wins max at every size; snake wins total at every size
+bk:       row_major wins max at every size; snake wins total at every size except 4x4, 8x8
+ternary:  row_major wins max at every size; snake wins total at every size except 3x3 (tie), 9x9
+```
+
+So JW is the exception, not the rule: for parity/BK/ternary tree, the
+leaderboard's reported (total, max) pair at a given size was never
+actually achieved by any single ordering — total came from one run
+(`snake`), max from a different one (`row_major`). That's not just
+inelegant, it's dishonest as a benchmark number, and it's also the harness
+doing a piece of the submitter's own optimization for them, which cuts
+against this project's own frozen-referee design principle (see
+`CLAUDE.md`).
+
+Fixed by moving the ordering choice into the submission itself: `encode(spec)
+-> mapping` is unchanged, but a submission may also define
+`order(Lx, Ly) -> perm`; the harness builds `spec` from that (`row_major` if
+none is declared) and scores exactly that one run, no search
+(`harness/lattice.py`'s `build_spec`). `scripts/submit_baseline.py` and
+`scripts/update_leaderboard.py` both do one evaluation per size now, not
+three.
+
+Since row_major/snake genuinely trade off for parity/BK/ternary tree (JW
+alone doesn't), each is registered under *both* — `baselines/bk.py`
+(`order = row_major`) and `baselines/bk_snake.py` (a thin wrapper reusing
+`bk.py`'s `encode()`, `order = snake`), same pattern for `parity`/`ternary`
+— so the tradeoff stays visible on the leaderboard (`BK (row-major)` vs.
+`BK (snake)` as separate, independently-ranked rows) rather than being
+picked once on the maintainers' behalf.

@@ -69,6 +69,36 @@ def test_shipped_stub_fails_cleanly_not_with_a_traceback(tmp_path):
     assert "NotImplementedError" in result.stdout
 
 
+def test_evaluate_uses_the_submissions_own_ordering_by_default(tmp_path):
+    # A submission declaring order() gets that ordering used automatically,
+    # with no --ordering flag needed -- and --ordering row_major overrides
+    # it back to row_major's (different) score.
+    solution = tmp_path / "snake_jw.py"
+    solution.write_text(
+        "from baselines.jw import encode\n"
+        "from harness.lattice import snake_perm\n\n"
+        "def order(Lx, Ly):\n"
+        "    return snake_perm(Lx, Ly)\n"
+    )
+
+    own_ordering = _run(
+        "evaluate", "--solution", str(solution), "--lx", "4", "--ly", "4",
+        "--results-file", str(tmp_path / "results_own.tsv"),
+    )
+    assert own_ordering.returncode == 0
+    assert "'total_weight': 448" in own_ordering.stdout  # JW's snake total at 4x4
+    assert "'max_weight': 8" in own_ordering.stdout       # JW's snake max at 4x4
+
+    overridden = _run(
+        "evaluate", "--solution", str(solution), "--lx", "4", "--ly", "4",
+        "--ordering", "row_major",
+        "--results-file", str(tmp_path / "results_override.tsv"),
+    )
+    assert overridden.returncode == 0
+    assert "'total_weight': 448" in overridden.stdout  # JW's row_major total at 4x4 (same, coincidentally)
+    assert "'max_weight': 5" in overridden.stdout       # JW's row_major max at 4x4 -- differs from snake's 8
+
+
 def test_evaluate_broken_encoding_fails_and_logs(tmp_path):
     broken = tmp_path / "broken.py"
     broken.write_text(

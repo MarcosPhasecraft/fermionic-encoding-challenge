@@ -30,24 +30,32 @@ agent, no search) is well underway. Currently working:
 - Pauli-weight scoring (total, max, average)
 - Four baseline encodings: Jordan-Wigner, parity basis, Bravyi-Kitaev, and
   ternary tree, all but JW built from a single general linear-encoding
-  constructor
+  constructor. Parity/BK/ternary tree are each registered twice — once
+  under `row_major`, once under `snake` (`baselines/*_snake.py`) — since no
+  single one of the three built-in orderings is best on both total and max
+  weight for those three encodings (JW alone has one ordering that's
+  jointly optimal on both)
+- Every baseline (and every submission) declares its own mode ordering via
+  an optional `order(Lx, Ly) -> perm`, defaulting to `row_major` if it
+  declares none — the harness does not search orderings on anyone's behalf
+  (see "Adding a baseline" below)
 - The `run.py evaluate` CLI and `results.tsv` logging
-- 99 passing tests
+- 112 passing tests
 - `scripts/submit_baseline.py` (test + register a new baseline) and
   `scripts/update_leaderboard.py` (regenerate `LEADERBOARD.md`)
 
 An extensive investigation validated this against arXiv 2504.21636's
-published Table I: our Bravyi-Kitaev max Pauli weight exactly matches
-their published values at every one of the 13 grid sizes checked; our
-Jordan-Wigner max Pauli weight matches for `3×3` through `8×8` (and
-provably beats them beyond that); our total Pauli weight beats their
-published values everywhere, for every encoding. Ternary tree's max Pauli
-weight, unlike the other three, comes out *worse* than published at every
-size under our three built-in orderings — an exhaustive `9!` search at
-`3×3` confirmed this is a limitation of that restricted ordering search,
-not a construction bug (the true optimum matches published exactly). Full
-details, including real bugs found and fixed along the way, are in
-`NOTES.md`.
+published Table I: our Bravyi-Kitaev max Pauli weight, under `row_major`,
+exactly matches their published values at every one of the 13 grid sizes
+checked; our Jordan-Wigner max Pauli weight matches for `3×3` through
+`8×8` (and provably beats them beyond that); our total Pauli weight beats
+their published values everywhere, for every encoding, under `snake`.
+Ternary tree's max Pauli weight, unlike the other three, initially looked
+*worse* than published under both built-in orderings — an exhaustive `9!`
+search at `3×3` confirmed this is a limitation of the harness's built-in
+orderings for a tree-structured encoding, not a construction bug (the true
+optimum matches published exactly). Full details, including real bugs
+found and fixed along the way, are in `NOTES.md`.
 
 Not yet built: stabilizer support. No hosted leaderboard/submission
 service exists yet — see `README.md`'s "How to play" for the current,
@@ -60,9 +68,10 @@ harness/            FROZEN — the trusted core; nothing here should change
                      to make a submission pass
   paulis.py          Pauli strings <-> symplectic bit-vector representation;
                      vectorized pairwise commutation check
-  lattice.py         rectangle() builds lattice specs under various mode
-                     orderings; hamiltonian() builds Majorana-index term
-                     lists from a spec
+  lattice.py         rectangle() builds lattice specs under a given mode
+                     ordering; build_spec(Lx, Ly, order_fn) builds one from
+                     a submission's own order() (row_major if None);
+                     hamiltonian() builds Majorana-index term lists
   verify.py          verify(spec, mapping) -- checks the mapping is a valid
                      encoding (well-formed, satisfies the Majorana algebra).
                      Never raises on malformed input.
@@ -73,15 +82,20 @@ harness/            FROZEN — the trusted core; nothing here should change
                      only if verification passed
   constructors.py    from_linear_encoding(U) -- general ancilla-free linear
                      encoding constructor; baselines build on this
+  loading.py         load_submission(path) -- (encode_fn, order_fn_or_None)
+                     from an arbitrary file
 
 baselines/           FROZEN — trusted reference implementations
   __init__.py        builds BASELINES from registry.json, by name
   registry.json       {"name": {"module": ..., "sizes": [...]}} manifest --
                      never hand-edit; scripts/submit_baseline.py writes it
-  jw.py              Jordan-Wigner
-  parity.py          Parity basis (dual to Jordan-Wigner)
-  bk.py              Bravyi-Kitaev (Fenwick-tree linear encoding)
-  ternary.py         Ternary tree (Sierpinski-tree linear encoding)
+  jw.py              Jordan-Wigner (order = row_major, jointly optimal)
+  parity.py          Parity basis (dual to Jordan-Wigner), order = row_major
+  parity_snake.py    Same encode() as parity.py, order = snake instead
+  bk.py              Bravyi-Kitaev (Fenwick-tree linear encoding), order = row_major
+  bk_snake.py        Same encode() as bk.py, order = snake instead
+  ternary.py         Ternary tree (Sierpinski-tree linear encoding), order = row_major
+  ternary_snake.py   Same encode() as ternary.py, order = snake instead
 
 solution/            EDITABLE -- a submission's encode(spec) -> mapping goes
                      here; ships as an unfilled NotImplementedError stub,
@@ -111,7 +125,15 @@ can be improved and compared.
    `from_linear_encoding(U)` rather than hand-writing Pauli strings — see
    `baselines/parity.py` for the pattern, and sanity-check against
    `from_linear_encoding(I)`, which must reproduce `baselines/jw.py`
-   exactly.
+   exactly. Optionally also define `order(Lx, Ly) -> perm` (defaults to
+   `row_major` if omitted) — see `harness/lattice.py`'s `row_major_perm`
+   /`snake_perm`/`diagonal_perm` for reusable examples, or write your own.
+   If your encoding's best total and best max weight come from genuinely
+   different orderings (true for parity/BK/ternary tree — see `NOTES.md`),
+   consider registering it twice, once per ordering, the way
+   `baselines/bk_snake.py` reuses `baselines/bk.py`'s `encode()` under a
+   different declared `order()` rather than duplicating logic — one
+   leaderboard entry shouldn't silently mix numbers from two different runs.
 2. Test and register it in one step:
 
    ```bash
@@ -121,16 +143,18 @@ can be improved and compared.
    `--sizes` accepts a range (`3-15`), a single size (`8`), or a list
    (`8,10,12`) — a submission doesn't have to cover the full range;
    defaults to `3-15` if omitted. This checks `verify()` passes at *every*
-   claimed size under all three built-in orderings, and only if everything
-   passes does it copy the file to `baselines/your_name.py` and add it to
-   `baselines/registry.json`. A failure explains exactly which size and why,
-   and touches nothing. Never hand-edit `registry.json` directly.
+   claimed size under your declared `order()` (or `row_major`, if you
+   declared none), and only if everything passes does it copy the file to
+   `baselines/your_name.py` and add it to `baselines/registry.json`. A
+   failure explains exactly which size and why, and touches nothing. Never
+   hand-edit `registry.json` directly.
 3. Add `tests/test_<name>.py` — at minimum, `verify()` passes for a few
-   sizes, and pin the resulting Pauli-string structure so a future refactor
-   can't silently change it.
-4. Run `python3 scripts/update_leaderboard.py` (seconds — evaluates the
-   three built-in orderings across every grid size each registered baseline
-   claims, not an exhaustive search over all orderings; see the file's own
+   sizes, pin the resulting Pauli-string structure so a future refactor
+   can't silently change it, and (if you defined one) pin `order()` against
+   whichever built-in permutation function it should match.
+4. Run `python3 scripts/update_leaderboard.py` (seconds — evaluates each
+   registered baseline once per grid size it claims, under its own declared
+   ordering, not a search over multiple orderings; see the file's own
    docstring) and commit the regenerated `LEADERBOARD.md` alongside your
    new baseline. Never hand-edit that file directly.
 

@@ -10,11 +10,18 @@ appear in the ranking for sizes it has no value for -- no blank-cell
 bookkeeping needed, the column for that size simply has fewer rows filled.
 
 For every baseline registered in baselines.BASELINES, evaluates it under
-the harness's three built-in orderings (row_major, snake, diagonal) and
-takes the best of those three per metric, per size -- NOT an exhaustive
-search over all orderings (infeasible beyond the smallest sizes; see
-NOTES.md for the one size, 3x3, where a separate exhaustive search
-additionally confirms these are the true global optimum).
+that baseline's own declared order(Lx, Ly) -> perm (row_major if it
+declares none -- see harness.lattice.build_spec). The harness does not
+search orderings on a submission's behalf: each entry here reflects one
+specific, submission-chosen labelling, not a best-of-several search
+(infeasible beyond the smallest sizes anyway; see NOTES.md for the one
+size, 3x3, where a separate exhaustive search over all 9! orderings
+confirmed ternary tree's row_major/snake numbers are within reach of the
+true global optimum for at least that size). Where an encoding's own best
+total and best max come from genuinely different orderings (true for
+parity, BK, and ternary tree -- NOTES.md has the breakdown), it's
+registered twice, once per ordering, rather than one leaderboard entry
+silently mixing numbers from two different runs.
 
 Paper reference rows (arXiv 2504.21636's own published Table I) are
 static data pulled from the paper's LaTeX source (not its prose, not its
@@ -25,7 +32,6 @@ Run this after adding or improving a baseline. LEADERBOARD.md is a
 generated artifact -- never hand-edit it.
 """
 
-import inspect
 import sys
 from pathlib import Path
 
@@ -34,10 +40,9 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from baselines import BASELINES
 from harness.evaluate import evaluate
-from harness.lattice import hamiltonian, rectangle
+from harness.lattice import build_spec, hamiltonian
 
 SIZES = list(range(3, 16))
-ORDERINGS = ("row_major", "snake", "diagonal")
 
 # arXiv 2504.21636 Table I, verbatim from the LaTeX source (main.tex, the
 # \begin{table*}...\end{table*} block labeled tab:lattice), for L=3..15.
@@ -56,32 +61,37 @@ PAPER_MAX = {
 # Which of our baselines.BASELINES names correspond to which paper row --
 # used to display our own row under the paper's own notation (JW, PB, not
 # the lowercase registry key). Anything registered under a name not listed
-# here just displays under its registry name.
-PAPER_ROW_FOR = {"jw": "JW", "parity": "PB", "bk": "BK", "ternary": "TT"}
+# here just displays under its registry name. Parity/BK/TT each get two
+# entries (row_major, snake) since no single one of the built-in orderings
+# is best on both metrics for those three encodings -- see NOTES.md.
+PAPER_ROW_FOR = {
+    "jw": "JW",
+    "parity": "PB (row-major)",
+    "parity_snake": "PB (snake)",
+    "bk": "BK (row-major)",
+    "bk_snake": "BK (snake)",
+    "ternary": "TT (row-major)",
+    "ternary_snake": "TT (snake)",
+}
 
 
-def source_link(encode_fn) -> str:
-    """Repo-relative path to the file defining encode_fn, for a markdown
-    link straight to the actual submission.
+def source_link(module: str) -> str:
+    """Repo-relative path to the module declaring a baseline, for a markdown
+    link straight to the actual submission. Built from the registry's own
+    "module" string rather than introspecting encode_fn -- a *_snake.py
+    wrapper imports its encode() from elsewhere, so the function object's
+    own source file would point at the wrong file.
     """
-    path = Path(inspect.getsourcefile(encode_fn)).resolve()
-    return path.relative_to(REPO_ROOT).as_posix()
+    return module.replace(".", "/") + ".py"
 
 
-def best_over_orderings(encode_fn, lx, ly):
-    best_total = None
-    best_max = None
-    for ordering in ORDERINGS:
-        spec = rectangle(lx, ly, ordering=ordering)
-        terms = hamiltonian(spec, model="full")
-        result = evaluate(spec, encode_fn, terms)
-        if not result["passed"]:
-            raise RuntimeError(f"{encode_fn} failed verify() at {lx}x{ly}/{ordering}: {result}")
-        if best_total is None or result["total_weight"] < best_total:
-            best_total = result["total_weight"]
-        if best_max is None or result["max_weight"] < best_max:
-            best_max = result["max_weight"]
-    return best_total, best_max
+def evaluate_baseline(encode_fn, order_fn, lx, ly):
+    spec = build_spec(lx, ly, order_fn)
+    terms = hamiltonian(spec, model="full")
+    result = evaluate(spec, encode_fn, terms)
+    if not result["passed"]:
+        raise RuntimeError(f"{encode_fn} failed verify() at {lx}x{ly}: {result}")
+    return result["total_weight"], result["max_weight"]
 
 
 def compute_our_entries():
@@ -94,13 +104,13 @@ def compute_our_entries():
     """
     total_entries, max_entries = [], []
     for name, entry in BASELINES.items():
-        encode_fn, sizes = entry["encode"], entry["sizes"]
+        encode_fn, order_fn, sizes = entry["encode"], entry["order"], entry["sizes"]
         label = PAPER_ROW_FOR.get(name, name)
-        link = source_link(encode_fn)
+        link = source_link(entry["module"])
         totals, maxes = {}, {}
         for l in sizes:
             i = SIZES.index(l)
-            total, max_weight = best_over_orderings(encode_fn, l, l)
+            total, max_weight = evaluate_baseline(encode_fn, order_fn, l, l)
             totals[i] = total
             maxes[i] = max_weight
         print(f"{name}: total={totals}")
@@ -160,13 +170,15 @@ def main():
             "Generated by `scripts/update_leaderboard.py` — **do not hand-edit this "
             "file**. Rows are rank positions, not fixed encodings: row 1 is whoever "
             "actually has the best score at that size, row 2 the runner-up, and so "
-            "on, so a column can have a different winner than its neighbor. Our own "
-            "entries are the best of the harness's three built-in orderings "
-            "(`row_major`, `snake`, `diagonal`), not an exhaustive search over every "
-            "ordering (infeasible beyond the smallest sizes; see NOTES.md for the "
-            "one size, 3×3, where a separate exhaustive search additionally confirms "
-            "these are the true global optimum). `[1]` rows are arXiv 2504.21636's "
-            "own published Table I, included for direct comparison.\n\n"
+            "on, so a column can have a different winner than its neighbor. Each "
+            "entry reflects that submission's own declared mode ordering "
+            "(`order(Lx, Ly) -> perm`, defaulting to `row_major` if it declares none) "
+            "-- the harness doesn't search orderings on a submission's behalf. Where "
+            "an encoding's own best total and best max weight come from genuinely "
+            "different orderings, it appears twice (e.g. `BK (row-major)` / "
+            "`BK (snake)`) rather than one entry silently mixing numbers from two "
+            "different runs. `[1]` rows are arXiv 2504.21636's own published "
+            "Table I, included for direct comparison.\n\n"
             "Lower is better, on both tables.\n\n"
         )
         render_ranked_table(

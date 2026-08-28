@@ -75,10 +75,10 @@ See [`LEADERBOARD.md`](LEADERBOARD.md) — total and maximum Pauli weight
 for every encoding implemented so far, across every square grid from
 `3×3` to `15×15`, with arXiv 2504.21636's own published numbers included
 for direct comparison. Every number there comes from actually running
-the current code, not hand-typed, and reflects the best of the harness's
-three built-in orderings — not an exhaustive search over every possible
-ordering, so there may be room to improve a listed number just by trying
-a different ordering, not only by writing a new encoding.
+the current code, not hand-typed, and reflects that submission's own
+declared mode ordering (see `order()` below) — the harness doesn't search
+orderings on your behalf, so there may be room to improve a listed number
+just by declaring a better ordering, not only by writing a new encoding.
 
 The open ground is genuinely open: different lattice shapes, better
 orderings for the encodings already here, and the much larger space of
@@ -120,8 +120,24 @@ def encode(spec: dict) -> dict:
 
 `spec` is a dict with `M` (mode count), `Lx`/`Ly`, `edges` (the fermionic
 interaction graph), and `coords` — everything you need is already in it;
-no other arguments are allowed. A complete, valid (if unremarkable)
-starting point is Jordan-Wigner itself:
+no other arguments are allowed.
+
+You may also define a companion function that picks which physical site
+gets which mode index — the harness builds `spec` using it if present:
+
+```python
+def order(Lx: int, Ly: int) -> list[int]:
+    ...  # perm[k] = mode index assigned to the site whose row-major raw index is k
+```
+
+If you don't define one, the harness defaults to `row_major`. Pauli weight
+is very sensitive to this choice — it's part of your submission, not
+something the harness searches for you, so a good ordering is as legitimate
+a way to improve your score as a better `encode()`. Like `encode()`, it
+must be a genuine formula in `Lx, Ly` (as the three examples in
+`harness/lattice.py` are), not a lookup table keyed to specific sizes.
+
+A complete, valid (if unremarkable) starting point is Jordan-Wigner itself:
 
 ```python
 def encode(spec):
@@ -154,9 +170,11 @@ row to `results.tsv`:
 ```
 
 If verification fails, scoring never runs — you'll see exactly which check
-failed and why, with no numbers attached. `--ly` (default `1`, a 1D chain),
-`--ordering` (`row_major` / `snake` / `diagonal`), and `--model`
-(`hopping` / `quadratic` / `full`, default `full`) are also available —
+failed and why, with no numbers attached. `--ly` (default `1`, a 1D chain)
+and `--model` (`hopping` / `quadratic` / `full`, default `full`) are also
+available. `--ordering` (`row_major` / `snake` / `diagonal`) overrides your
+own `order()` for one-off local experimentation — omit it to use your
+submission's own declared ordering (or `row_major`, if it declares none).
 `python3 run.py evaluate --help` for the full list.
 
 **There's no hosted submission service yet** — every `run.py evaluate` run

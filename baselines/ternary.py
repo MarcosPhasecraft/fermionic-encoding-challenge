@@ -8,6 +8,13 @@ arXiv 2504.21636's released code (hexaly_quadratic_assignment.py's
 sierpinski()/tt()) -- reimplemented in plain numpy, preserving the exact
 recursion, padding, and the reference's float-arithmetic midpoints (the
 range doesn't always split evenly into thirds).
+
+order() declares row_major, which wins max weight at every size checked --
+snake wins total weight instead (see baselines/ternary_snake.py and
+NOTES.md for the full breakdown, including the exhaustive 3x3 search that
+confirmed this encoding's true optimum matches the paper's published max
+exactly); no single one of the built-in orderings is best on both metrics
+for this encoding.
 """
 
 import math
@@ -15,6 +22,11 @@ import math
 import numpy as np
 
 from harness.constructors import from_linear_encoding, transitive_closure
+from harness.lattice import row_major_perm
+
+
+def order(Lx: int, Ly: int) -> list[int]:
+    return row_major_perm(Lx, Ly)
 
 
 def _mid(a: float, b: float) -> int:

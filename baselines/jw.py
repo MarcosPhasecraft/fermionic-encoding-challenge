@@ -3,7 +3,18 @@
 Frozen reference implementation, trusted for Stage 1 calibration. Depends
 only on spec["M"] -- JW cares about linear mode order, not lattice geometry,
 so the same function handles a 1D chain and a flattened 2D lattice identically.
+
+order() declares row_major -- proven jointly optimal for both total and max
+Pauli weight at every grid size checked (NOTES.md's closed form), unlike
+every other baseline here, which trades total against max between
+row_major and snake.
 """
+
+from harness.lattice import row_major_perm
+
+
+def order(Lx: int, Ly: int) -> list[int]:
+    return row_major_perm(Lx, Ly)
 
 
 def encode(spec: dict) -> dict:

@@ -70,5 +70,59 @@
       14,
       15
     ]
+  },
+  "parity_snake": {
+    "module": "baselines.parity_snake",
+    "sizes": [
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ]
+  },
+  "bk_snake": {
+    "module": "baselines.bk_snake",
+    "sizes": [
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ]
+  },
+  "ternary_snake": {
+    "module": "baselines.ternary_snake",
+    "sizes": [
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ]
   }
 }

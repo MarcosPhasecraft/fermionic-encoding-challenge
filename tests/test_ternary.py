@@ -5,8 +5,11 @@ import math
 import pytest
 
 from baselines.jw import encode as jw_encode
-from baselines.ternary import encode, tt_matrix
+from baselines.ternary import encode, order, tt_matrix
+from baselines.ternary_snake import encode as snake_encode
+from baselines.ternary_snake import order as snake_order
 from harness.constructors import _invert_gf2
+from harness.lattice import row_major_perm, snake_perm
 from harness.verify import verify
 
 
@@ -54,3 +57,14 @@ def test_num_weight_nondecreasing():
         f = _invert_gf2(tt_matrix(m))
         weights.append(max(int(row.sum()) for row in f))
     assert weights == sorted(weights)
+
+
+def test_declared_ordering_is_row_major():
+    assert order(3, 3) == row_major_perm(3, 3)
+
+
+def test_snake_variant_declares_snake_and_reuses_the_same_encode():
+    # ternary_snake.py is a thin wrapper: same encoding, different declared
+    # ordering -- prove it's actually the same function, not a duplicate.
+    assert snake_encode is encode
+    assert snake_order(3, 3) == snake_perm(3, 3)

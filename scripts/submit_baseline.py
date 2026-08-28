@@ -6,9 +6,10 @@ promote it into baselines/ and register it in registry.json.
     python3 scripts/submit_baseline.py --file their_encode.py --name theirname   # sizes default to 3-15
 
 Never touches baselines/ or registry.json unless the submission passes
-verify() at every claimed size, under all three of the harness's built-in
-orderings (row_major, snake, diagonal). Sizes are restricted to 3..15,
-the leaderboard's current range.
+verify() at every claimed size, under the submission's own declared
+order(Lx, Ly) -> perm (row_major if it declares none -- see
+harness.lattice.build_spec). Sizes are restricted to 3..15, the
+leaderboard's current range.
 
 Does NOT regenerate LEADERBOARD.md itself -- run scripts/update_leaderboard.py
 afterward. Kept separate since that script re-evaluates every registered
@@ -25,10 +26,9 @@ REPO_ROOT = Path(__file__).parent.parent.resolve()
 sys.path.insert(0, str(REPO_ROOT))
 
 from harness.evaluate import evaluate
-from harness.lattice import hamiltonian, rectangle
-from harness.loading import load_encode_fn
+from harness.lattice import build_spec, hamiltonian
+from harness.loading import load_submission
 
-ORDERINGS = ("row_major", "snake", "diagonal")
 REGISTRY_PATH = REPO_ROOT / "baselines" / "registry.json"
 MIN_SIZE, MAX_SIZE = 3, 15
 
@@ -60,23 +60,18 @@ def summarize_failure(result: dict) -> str:
     return f"{algebra['n_violations']} Majorana pairs fail to anticommute, e.g. {examples}{more}"
 
 
-def check_at_size(encode_fn, l: int) -> tuple[int, int]:
-    """Best (total, max) over the three orderings at size l x l. Raises
-    with a specific size/ordering/reason if verify() fails anywhere --
-    never silently accepts a partially-working submission.
+def check_at_size(encode_fn, order_fn, l: int) -> tuple[int, int]:
+    """(total, max) at size l x l, under the submission's own declared
+    ordering (row_major if it declares none). Raises with a specific
+    size/reason if verify() fails -- never silently accepts a
+    partially-working submission.
     """
-    best_total = best_max = None
-    for ordering in ORDERINGS:
-        spec = rectangle(l, l, ordering=ordering)
-        terms = hamiltonian(spec, model="full")
-        result = evaluate(spec, encode_fn, terms)
-        if not result["passed"]:
-            raise SystemExit(f"FAILED at {l}x{l}, ordering={ordering}: {summarize_failure(result)}")
-        if best_total is None or result["total_weight"] < best_total:
-            best_total = result["total_weight"]
-        if best_max is None or result["max_weight"] < best_max:
-            best_max = result["max_weight"]
-    return best_total, best_max
+    spec = build_spec(l, l, order_fn)
+    terms = hamiltonian(spec, model="full")
+    result = evaluate(spec, encode_fn, terms)
+    if not result["passed"]:
+        raise SystemExit(f"FAILED at {l}x{l}: {summarize_failure(result)}")
+    return result["total_weight"], result["max_weight"]
 
 
 def main():
@@ -96,11 +91,11 @@ def main():
     if args.name in registry and not args.force:
         raise SystemExit(f"'{args.name}' is already registered -- pass --force to overwrite it")
 
-    encode_fn = load_encode_fn(args.file)
+    encode_fn, order_fn = load_submission(args.file)
 
     print(f"testing '{args.name}' at sizes {sizes} ...")
     for l in sizes:
-        total, max_weight = check_at_size(encode_fn, l)
+        total, max_weight = check_at_size(encode_fn, order_fn, l)
         print(f"  {l}x{l}: total={total} max={max_weight}")
 
     dest = REPO_ROOT / "baselines" / f"{args.name}.py"

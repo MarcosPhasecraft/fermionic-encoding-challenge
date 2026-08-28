@@ -20,8 +20,8 @@ import sys
 from pathlib import Path
 
 from harness.evaluate import evaluate
-from harness.lattice import hamiltonian, rectangle
-from harness.loading import load_encode_fn
+from harness.lattice import build_spec, hamiltonian, rectangle
+from harness.loading import load_submission
 from harness.verify import verify
 
 RESULTS_TSV = Path(__file__).parent / "results.tsv"
@@ -48,8 +48,14 @@ def cmd_verify(args):
 
 
 def cmd_evaluate(args):
-    encode_fn = load_encode_fn(args.solution)
-    spec = rectangle(args.lx, args.ly, ordering=args.ordering)
+    encode_fn, order_fn = load_submission(args.solution)
+    if args.ordering is not None:
+        # Explicit override -- ignores the submission's own order(), if any.
+        spec = rectangle(args.lx, args.ly, ordering=args.ordering)
+        ordering_used = args.ordering
+    else:
+        spec = build_spec(args.lx, args.ly, order_fn)
+        ordering_used = "own" if order_fn is not None else "row_major"
     terms = hamiltonian(spec, model=args.model)
     result = evaluate(spec, encode_fn, terms)
 
@@ -62,7 +68,7 @@ def cmd_evaluate(args):
         "solution": args.solution,
         "lx": args.lx,
         "ly": args.ly,
-        "ordering": args.ordering,
+        "ordering": ordering_used,
         "model": args.model,
         "passed": result["passed"],
         "n_qubits": result.get("n_qubits", ""),
@@ -89,7 +95,10 @@ def main():
     evaluate_parser.add_argument("--solution", default="solution/encode.py", help="path to a Python file with an encode(spec) function")
     evaluate_parser.add_argument("--lx", type=int, required=True)
     evaluate_parser.add_argument("--ly", type=int, default=1)
-    evaluate_parser.add_argument("--ordering", default="row_major", choices=["row_major", "snake", "diagonal"])
+    evaluate_parser.add_argument(
+        "--ordering", default=None, choices=["row_major", "snake", "diagonal"],
+        help="override the submission's own order(), if any (default: use its own, or row_major)",
+    )
     evaluate_parser.add_argument("--model", default="full", choices=["hopping", "quadratic", "full"])
     evaluate_parser.add_argument("--note", default="", help="free-text note, logged to results.tsv")
     evaluate_parser.add_argument("--results-file", default=str(RESULTS_TSV), help="override the results log path (mainly for tests)")

@@ -93,6 +93,14 @@ looking at anything else.
 `Lx`, `Ly`, no size-keyed tables. This is enforced by evaluating on held-out
 sizes, not by code review, so don't rely on a submission "looking" uniform.
 
+The same constraint applies to the optional companion `order(Lx, Ly) ->
+perm` (a submission's declared mode ordering — see `harness/lattice.py`'s
+`build_spec`, and NOTES.md's "Submissions declare their own ordering" for
+why the harness stopped searching orderings itself). It must be a genuine
+formula in `Lx, Ly`, like the three built-in orderings it can be built
+from (`row_major_perm`/`snake_perm`/`diagonal_perm`) — not a lookup table
+keyed to specific sizes the submitter happens to know are tested.
+
 ## Conventions
 
 - Python, `numpy` for the harness. `pytest` for tests. `openfermion` is a

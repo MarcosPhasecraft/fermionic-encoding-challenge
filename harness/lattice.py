@@ -5,11 +5,11 @@ for the ordering-sensitivity check.
 """
 
 
-def _row_major_perm(Lx: int, Ly: int) -> list[int]:
+def row_major_perm(Lx: int, Ly: int) -> list[int]:
     return list(range(Lx * Ly))
 
 
-def _snake_perm(Lx: int, Ly: int) -> list[int]:
+def snake_perm(Lx: int, Ly: int) -> list[int]:
     """Boustrophedon: row 0 left-to-right, row 1 right-to-left, etc."""
     perm = [0] * (Lx * Ly)
     mode = 0
@@ -21,7 +21,7 @@ def _snake_perm(Lx: int, Ly: int) -> list[int]:
     return perm
 
 
-def _diagonal_perm(Lx: int, Ly: int) -> list[int]:
+def diagonal_perm(Lx: int, Ly: int) -> list[int]:
     """Anti-diagonals x+y=const, in order, each scanned by increasing x."""
     perm = [0] * (Lx * Ly)
     mode = 0
@@ -34,9 +34,9 @@ def _diagonal_perm(Lx: int, Ly: int) -> list[int]:
 
 
 _ORDERINGS = {
-    "row_major": _row_major_perm,
-    "snake": _snake_perm,
-    "diagonal": _diagonal_perm,
+    "row_major": row_major_perm,
+    "snake": snake_perm,
+    "diagonal": diagonal_perm,
 }
 
 
@@ -78,6 +78,18 @@ def rectangle(Lx: int, Ly: int, ordering: str = "row_major", perm: list[int] | N
         "edges": edges,
         "coords": coords,
     }
+
+
+def build_spec(Lx: int, Ly: int, order_fn=None) -> dict:
+    """rectangle(Lx, Ly), using order_fn(Lx, Ly) -> perm if given (normally a
+    submission's own declared order()), else row_major. The one place the
+    "submission's ordering, or row_major default" fallback lives -- callers
+    (run.py, scripts/submit_baseline.py, scripts/update_leaderboard.py) all
+    use this instead of duplicating the fallback themselves.
+    """
+    if order_fn is None:
+        return rectangle(Lx, Ly, ordering="row_major")
+    return rectangle(Lx, Ly, ordering="custom", perm=order_fn(Lx, Ly))
 
 
 _VALID_MODELS = {"hopping", "quadratic", "full"}

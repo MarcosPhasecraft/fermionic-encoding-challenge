@@ -6,7 +6,15 @@ cover the full 3x3..15x15 range -- see scripts/submit_baseline.py). Don't
 hand-edit registry.json directly; scripts/submit_baseline.py writes it
 after confirming a submission actually passes at every size it claims.
 
-BASELINES[name] = {"encode": encode_fn, "sizes": [int, ...]}
+BASELINES[name] = {"encode": encode_fn, "order": order_fn_or_None,
+                    "sizes": [int, ...], "module": "baselines.name"}
+
+"order" is the module's own optional order(Lx, Ly) -> perm (None if it
+declares none, in which case harness.lattice.build_spec falls back to
+row_major). "module" is kept alongside "encode" so the leaderboard can link
+to the file that actually declares a baseline's identity even when its
+encode_fn is imported from elsewhere (see baselines/*_snake.py, which reuse
+another baseline's encode() under a different declared ordering).
 """
 
 import importlib
@@ -22,7 +30,12 @@ def _load_registry() -> dict:
     registry = {}
     for name, entry in raw.items():
         module = importlib.import_module(entry["module"])
-        registry[name] = {"encode": module.encode, "sizes": entry["sizes"]}
+        registry[name] = {
+            "encode": module.encode,
+            "order": getattr(module, "order", None),
+            "sizes": entry["sizes"],
+            "module": entry["module"],
+        }
     return registry
 
 

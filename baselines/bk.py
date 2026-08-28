@@ -8,6 +8,11 @@ identity (every mode is trivially its own ancestor). Cross-checked against
 arXiv 2504.21636's released code (hexaly_quadratic_assignment.py's
 fenwick()/bk()) -- reimplemented in plain numpy rather than their
 GF(2)-Galois-array style, but preserving the exact recursion and padding.
+
+order() declares row_major, which matches the paper's published max weight
+exactly at every size checked -- snake wins total weight instead (see
+baselines/bk_snake.py and NOTES.md for the full breakdown); no single one
+of the built-in orderings is best on both metrics for this encoding.
 """
 
 import math
@@ -15,6 +20,11 @@ import math
 import numpy as np
 
 from harness.constructors import from_linear_encoding, transitive_closure
+from harness.lattice import row_major_perm
+
+
+def order(Lx: int, Ly: int) -> list[int]:
+    return row_major_perm(Lx, Ly)
 
 
 def _fenwick(u: np.ndarray, c: int, r: int) -> None:
