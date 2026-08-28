@@ -52,7 +52,12 @@ def test_accepted_submission_lands_in_baselines(tmp_path, monkeypatch):
     assert registry["pytest_smoke_jw"]["module"] == "baselines.pytest_smoke_jw"
     assert "submitted_at" in registry["pytest_smoke_jw"]
     assert not (inbox_dir / "sub_1").exists()
-    assert (inbox_dir / "_processed" / "pytest_smoke_jw").is_dir()
+    # Archived as <timestamp>_<name>, not just <name> -- sortable by
+    # acceptance order (scripts/process_inbox.py's archived_name).
+    archived = list((inbox_dir / "_processed").iterdir())
+    assert len(archived) == 1
+    assert archived[0].name.endswith("_pytest_smoke_jw")
+    assert (archived[0] / "submission.json").is_file()
 
 
 def test_name_collision_rejected_and_not_registered(tmp_path, monkeypatch):

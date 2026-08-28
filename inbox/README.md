@@ -1,17 +1,24 @@
 # Submission inbox
 
-Drop each new submission in its own folder here, in this exact shape:
+Ask whoever's submitting to hand you the **whole folder, already built**,
+in this exact shape:
 
 ```
-inbox/
-  <any-folder-name>/
-    encode.py         # def encode(spec) -> mapping; optional def order(Lx, Ly) -> perm
-    submission.json   # {"name": "...", "label": "...", "sizes": "3-15"}
+<any-folder-name>/
+  encode.py         # def encode(spec) -> mapping; optional def order(Lx, Ly) -> perm
+  submission.json   # {"name": "...", "label": "...", "sizes": "3-15"}
 ```
+
+Then it's two steps on your end: drop that folder straight into `inbox/`
+(so it's `inbox/<their-folder-name>/encode.py` and
+`inbox/<their-folder-name>/submission.json`), and run the pipeline (below).
+No repackaging, no copy-pasting individual files — take the folder they
+gave you as-is.
 
 The folder name itself doesn't matter — `scripts/process_inbox.py` reads
-the real identity from `submission.json`, not the folder. Number them
-however's convenient (`submission_4`, `submission_5`, ...).
+the real identity from `submission.json`, not the folder — so whatever
+they called it is fine to keep. Several pending submissions can sit in
+`inbox/` at once; one run of the pipeline handles all of them.
 
 ## `submission.json`
 
@@ -66,8 +73,10 @@ Processes every folder here, in one pass, with no manual flags and no AI
 involvement: validates the manifest, validates the file's structure, runs
 the exact same `verify()` gate every other baseline has gone through, and
 if a submission passes, registers it and moves its folder to
-`_processed/<name>/`. A submission that fails is left exactly where it
-is — fix it and run the command again.
+`_processed/<timestamp>_<name>/` (e.g. `_processed/20260828-144437_alice_bk/`
+— sortable by acceptance order; the original `submission.json` and
+`encode.py` are archived there unchanged). A submission that fails is left
+exactly where it is — fix it and run the command again.
 
 If anything was accepted, the script regenerates `LEADERBOARD.md`, re-runs
 the test suite, prints a summary, and only then asks you — on the

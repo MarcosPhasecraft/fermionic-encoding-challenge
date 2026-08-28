@@ -86,27 +86,29 @@ encodings beyond JW, parity basis, Bravyi-Kitaev, and ternary tree.
 
 **Found something better?**
 
-Drop it in its own folder under `inbox/`:
+Package it as one self-contained folder:
 
 ```
-inbox/<any-folder-name>/
+<any-folder-name>/
   encode.py         # def encode(spec) -> mapping; optional def order(Lx, Ly) -> perm
   submission.json   # {"name": "...", "label": "...", "sizes": "3-15"}
 ```
 
-then run:
+and hand that whole folder — as one unit, not just the `.py` file — to
+whoever maintains this repo. `submission.json`'s exact schema is in
+`inbox/README.md`; the short version is `name` (a filesystem-safe
+identifier), `label` (what shows on the leaderboard), and `sizes` (which
+grids it claims to be valid for), all required.
 
-```bash
-python3 scripts/process_inbox.py
-```
-
-That's the whole submission process — one command, no manual flags. It
-validates the manifest and the file, runs `verify()` at every size
-claimed, and only if everything passes registers it, regenerates
-`LEADERBOARD.md`, and re-runs the test suite. See `inbox/README.md` for
-the exact manifest schema. (A single ad hoc file can still be tested by
-hand with `scripts/submit_baseline.py --file ... --name ...` — see
-`CONTRIBUTING.md`.)
+On their end, registering it is one command —
+`python3 scripts/process_inbox.py`, run after dropping your folder into
+`inbox/` — which validates the manifest and the file, runs `verify()` at
+every size claimed, and only if everything passes registers it,
+regenerates `LEADERBOARD.md`, and re-runs the test suite. No manual flags,
+no case-by-case judgment calls. (A single ad hoc file can still be tested
+by hand with `scripts/submit_baseline.py --file ... --name ...` — see
+`CONTRIBUTING.md` — useful for trying your own idea locally before
+sending it over.)
 
 ## How to play
 

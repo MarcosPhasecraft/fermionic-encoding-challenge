@@ -28,7 +28,9 @@ A submission that passes gets copied to baselines/<name>.py, registered
 in registry.json (with an acceptance timestamp stamped here, from this
 machine's clock -- never taken from the submission itself -- and
 generated_by copied through if given), and its inbox folder is moved to
-inbox/_processed/<name>/ as a local record of exactly what was submitted.
+inbox/_processed/<timestamp>_<name>/ (e.g. 20260828-144437_alice_bk/) --
+sortable by acceptance order, a local record of exactly what was
+submitted.
 
 If anything was newly accepted this run: LEADERBOARD.md is regenerated
 (scripts/update_leaderboard.py, run as a fresh subprocess so it reads the
@@ -116,15 +118,22 @@ def _process_one(folder: Path, registry: dict) -> dict:
 
         dest = submission_lib.BASELINES_DIR / f"{name}.py"
         shutil.copy(encode_path, dest)
-        submitted_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        now = datetime.now(timezone.utc)
+        submitted_at = now.isoformat(timespec="seconds")
         registry[name] = registry_entry(
             name, manifest["sizes"], manifest["label"],
             generated_by=manifest.get("generated_by"), submitted_at=submitted_at,
         )
         save_registry(registry)
 
+        # Archived under <timestamp>_<name> -- sortable by acceptance
+        # order, and name alone (already a clean identifier by
+        # validate_manifest's pattern) is informative without needing to
+        # sanitize free-text label/generated_by into a filename; both stay
+        # readable in the archived submission.json itself.
         PROCESSED.mkdir(parents=True, exist_ok=True)
-        shutil.move(str(folder), str(PROCESSED / name))
+        archived_name = f"{now.strftime('%Y%m%d-%H%M%S')}_{name}"
+        shutil.move(str(folder), str(PROCESSED / archived_name))
 
         return {"name": name, "label": manifest["label"], "accepted": True,
                 "scores": scores, "submitted_at": submitted_at,
