@@ -4,8 +4,10 @@ matplotlib wrapper -- smoke tested (does it write a real PNG) rather than
 pixel-tested.
 """
 
+import datetime
+
 import scripts.progress_chart as progress_chart
-from scripts.progress_chart import compute_staircase, points_at_size
+from scripts.progress_chart import compute_staircase, points_at_size, restrict_to_window
 
 
 # --- points_at_size ---
@@ -60,6 +62,29 @@ def test_staircase_does_not_redraw_on_an_exact_tie():
 
 def test_staircase_empty_input_gives_empty_output():
     assert compute_staircase([]) == []
+
+
+# --- restrict_to_window ---
+
+
+def test_restrict_to_window_drops_entries_before_start():
+    staircase = [
+        ("2026-08-26T00:00:00+00:00", 900, "before"),
+        ("2026-08-28T12:00:00+00:00", 500, "after"),
+    ]
+    start = datetime.datetime.fromisoformat("2026-08-28T00:00:00+00:00")
+    assert restrict_to_window(staircase, start) == [staircase[1]]
+
+
+def test_restrict_to_window_keeps_an_entry_exactly_at_start():
+    staircase = [("2026-08-28T00:00:00+00:00", 500, "on-the-dot")]
+    start = datetime.datetime.fromisoformat("2026-08-28T00:00:00+00:00")
+    assert restrict_to_window(staircase, start) == staircase
+
+
+def test_restrict_to_window_none_returns_everything_unchanged():
+    staircase = [("2026-08-26T00:00:00+00:00", 900, "before")]
+    assert restrict_to_window(staircase, None) == staircase
 
 
 # --- render_progress_chart (smoke test) ---

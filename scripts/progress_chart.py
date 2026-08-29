@@ -22,8 +22,42 @@ this size (their own optimized result -- the external record to beat).
 """
 
 import datetime as _dt
+from zoneinfo import ZoneInfo
 
 TARGET_SIZE = 15
+
+# submitted_at is stamped in UTC (datetime.now(timezone.utc), see
+# scripts/process_inbox.py) -- correct, but a UTC calendar date rolls over
+# hours before the US Eastern one a maintainer actually thinks in, e.g. a
+# submission at 9:36pm ET already reads as "the next day" in UTC. Rather
+# than pick a per-viewer timezone (this file is generated once and
+# committed for anyone to view, so there's no one "current viewer" to ask),
+# ET is hardcoded as the project's own display convention. ZoneInfo (not a
+# fixed UTC offset) so this stays correct across DST changes.
+DISPLAY_TZ = ZoneInfo("America/New_York")
+
+# The chart's visible window starts here, not at the true first submission
+# -- jw and parity (2026-08-26) predate any real external submission and
+# are just our own canonical reference baselines, not part of the
+# community-progress story this chart tells. geo_ternary, the first
+# genuinely new submission, landed 2026-08-28 (02:37 ET); the cutoff is set
+# to that calendar day's ET midnight rather than to geo_ternary's own
+# timestamp so it isn't read as an arbitrary, submission-specific
+# cherry-pick. Set to None to show the full history again.
+DISPLAY_START = _dt.datetime(2026, 8, 28, tzinfo=DISPLAY_TZ)
+
+
+def restrict_to_window(staircase, start):
+    """staircase: [(submitted_at_iso, value, label), ...] -> only the
+    entries at or after `start` (a datetime), or everything if start is
+    None. Used to decide which record points get a marker/label drawn --
+    kept separate from compute_staircase so the staircase itself always
+    reflects true, uncropped history (the step line's height entering the
+    visible window still needs the pre-window record it inherited).
+    """
+    if start is None:
+        return staircase
+    return [(t, v, l) for t, v, l in staircase if _dt.datetime.fromisoformat(t) >= start]
 
 
 def points_at_size(dated_totals, size_index):
@@ -114,18 +148,27 @@ def render_progress_chart(points, reference_lines, out_path, title, ylabel):
             stair_times, stair_values, where="post",
             color=ACCENT, linewidth=2.5, zorder=3, solid_capstyle="round",
         )
-    if stair_times:
+    # Markers/labels only for records inside the visible window -- a record
+    # set before DISPLAY_START would otherwise get a dot/label rendered at
+    # an x-position matplotlib then clips out of view anyway, at best doing
+    # nothing and at worst (annotate's clipping heuristics are unreliable
+    # right at the edge) leaving a stray label floating at the axis border.
+    visible = restrict_to_window(staircase, DISPLAY_START)
+    visible_times = [_dt.datetime.fromisoformat(t) for t, _, _ in visible]
+    visible_values = [v for _, v, _ in visible]
+    if visible_times:
         ax.scatter(
-            stair_times, stair_values, color=ACCENT, s=70, zorder=4,
+            visible_times, visible_values, color=ACCENT, s=70, zorder=4,
             edgecolor="white", linewidth=1.5,
         )
-        # Annotate only the opening and current-best values -- with many
-        # closely-spaced records (expected as submissions accumulate), a
-        # label per point overlaps its neighbors; the two numbers that
-        # matter most for an at-a-glance read are "started at" and "now
-        # at", and the shape of the staircase already carries the rest.
-        endpoints = {0, len(staircase) - 1}
-        for i, (t, v, _) in enumerate(staircase):
+        # Annotate only the opening (of the visible window) and
+        # current-best values -- with many closely-spaced records
+        # (expected as submissions accumulate), a label per point overlaps
+        # its neighbors; the two numbers that matter most for an
+        # at-a-glance read are "started at" and "now at", and the shape of
+        # the staircase already carries the rest.
+        endpoints = {0, len(visible) - 1}
+        for i, (t, v, _) in enumerate(visible):
             if i not in endpoints:
                 continue
             ax.annotate(
@@ -149,6 +192,7 @@ def render_progress_chart(points, reference_lines, out_path, title, ylabel):
         )
 
     ax.set_title(title, fontsize=15, fontweight="bold", loc="left", pad=14)
+    ax.set_xlabel("Submission date (ET)", fontsize=9)
     ax.set_ylabel(ylabel, fontsize=10)
     ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda v, _: f"{int(v):,}"))
     ax.grid(axis="y", color="#e9ecef", linewidth=1, zorder=0)
@@ -158,14 +202,16 @@ def render_progress_chart(points, reference_lines, out_path, title, ylabel):
     for side in ("left", "bottom"):
         ax.spines[side].set_color("#d0d3d8")
 
-    locator = mdates.AutoDateLocator()
+    locator = mdates.AutoDateLocator(tz=DISPLAY_TZ)
     ax.xaxis.set_major_locator(locator)
-    ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(locator))
+    ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(locator, tz=DISPLAY_TZ))
+    if DISPLAY_START is not None:
+        ax.set_xlim(left=DISPLAY_START)
 
     # Fixed margins rather than tight_layout: the reference-line labels are
     # drawn outside the axes proper (axes-fraction x > 1), which
     # tight_layout doesn't account for -- a right margin is reserved
     # explicitly instead so they're never cut off at the figure edge.
-    fig.subplots_adjust(left=0.10, right=0.78, top=0.88, bottom=0.10)
+    fig.subplots_adjust(left=0.10, right=0.78, top=0.88, bottom=0.14)
     fig.savefig(out_path, dpi=150, facecolor="white")
     plt.close(fig)
