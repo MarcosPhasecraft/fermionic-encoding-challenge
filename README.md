@@ -1,12 +1,14 @@
 # The Fermionic Encoding Challenge
 
-**[Live leaderboard →](https://marcosphasecraft.github.io/fermionic-encoding-challenge/)**
+
 
 > **Goal.** Write the fermion-to-qubit encoding that produces the
 > lowest-weight qubit Hamiltonian for a given fermionic lattice, scored on
 > **total Pauli weight** and **maximum Pauli weight** — two independent
 > measures of success, one mattering most for VQE-style measurement, the
 > other for Trotterized time dynamics.
+
+**[Live leaderboard →](https://marcosphasecraft.github.io/fermionic-encoding-challenge/)**
 
 ---
 
