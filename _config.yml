@@ -1,3 +1,9 @@
 theme: jekyll-theme-cayman
 title: Fermionic Encoding Challenge
 description: Write the fermion-to-qubit encoding that produces the lowest-weight qubit Hamiltonian.
+
+# _leaderboard_body.md is a fragment meant only to be pulled into index.md
+# via {% include_relative %} -- excluded here so Jekyll doesn't also turn
+# it into its own standalone page.
+exclude:
+  - _leaderboard_body.md
