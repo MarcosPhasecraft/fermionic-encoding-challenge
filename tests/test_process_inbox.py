@@ -158,6 +158,13 @@ def test_files_touched_omits_leaderboard_and_memory_index_when_skipped():
     touched = process_inbox._files_touched(accepted, skip_leaderboard=True)
     assert "LEADERBOARD.md" not in touched
     assert "MEMORY.md" not in touched
+    assert "assets/progress_total_weight.png" not in touched
+
+
+def test_files_touched_includes_progress_chart_when_not_skipped():
+    accepted = [{"name": "alice", "has_memory": False}]
+    touched = process_inbox._files_touched(accepted, skip_leaderboard=False)
+    assert "assets/progress_total_weight.png" in touched
 
 
 # --- _prewarm_leaderboard_cache: without this, a brand-new submission's

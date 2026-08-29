@@ -1,4 +1,5 @@
-"""Regenerates LEADERBOARD.md (and MEMORY.md) from scratch.
+"""Regenerates LEADERBOARD.md (and MEMORY.md, and assets/progress_total_weight.png)
+from scratch.
 
 Layout: one table per metric (total, max), columns fixed at 3x3..15x15,
 but ROWS ARE RANK POSITIONS, not fixed encodings -- row 1 is whoever
@@ -48,6 +49,15 @@ optional memory/ folder (notes on what was tried, carried in by
 scripts/process_inbox.py -- see inbox/README.md), deliberately kept
 separate from the score tables above rather than cluttering their cells.
 
+Also writes assets/progress_total_weight.png, embedded at the top of
+LEADERBOARD.md before the tables: total Pauli weight at a single fixed
+size (TARGET_SIZE, see scripts/progress_chart.py) plotted against each
+submission's date, so the record-over-time line is unambiguous -- a
+submission can win at one lattice size and lose at another, so a line
+spanning multiple sizes would either have to scalarize across them (ruled
+out project-wide) or visibly go up and down. The full per-size picture is
+still the two tables below it, unabridged.
+
 Run this after adding or improving a baseline. LEADERBOARD.md is a
 generated artifact -- never hand-edit it.
 """
@@ -63,6 +73,7 @@ sys.path.insert(0, str(REPO_ROOT))
 # the distinction matters (module identity, not just resolvability). Tests
 # that need to redirect the cache file monkeypatch
 # scripts.submission_lib.CACHE_PATH directly, not a copy here.
+from scripts.progress_chart import TARGET_SIZE, points_at_size, render_progress_chart
 from scripts.submission_lib import harness_fingerprint, hash_file, load_score_cache, save_score_cache
 
 from baselines import BASELINES
@@ -144,12 +155,19 @@ def scored_with_cache(name, encode_fn, order_fn, sizes, file_fp, cache_entries):
 
 
 def compute_our_entries():
-    """entries[metric] = list of (label, link, {size_index: value}).
+    """(total_entries, max_entries, dated_totals).
 
-    Only computes the sizes each baseline actually claims (registry.json's
-    "sizes" list) -- a size-scoped submission just gets fewer entries in
-    its dicts, which render_ranked_table already handles as "not ranked
-    at this size" rather than needing an explicit blank convention.
+    total_entries/max_entries: list of (label, link, {size_index: value}),
+    for render_ranked_table. Only computes the sizes each baseline actually
+    claims (registry.json's "sizes" list) -- a size-scoped submission just
+    gets fewer entries in its dicts, which render_ranked_table already
+    handles as "not ranked at this size" rather than needing an explicit
+    blank convention.
+
+    dated_totals: list of (name, submitted_at, label, {size_index: value}) --
+    the same total-weight scores as total_entries, but keeping the
+    registry name and submission date, which the ranked table doesn't need
+    but scripts/progress_chart.py's points_at_size does.
 
     See the module docstring for the caching scheme (per-baseline file
     hash, gated by a whole-harness/ hash) and scored_with_cache for the
@@ -163,7 +181,7 @@ def compute_our_entries():
         cache = {"_harness_fingerprint": harness_fp, "entries": {}}
     cache.setdefault("entries", {})
 
-    total_entries, max_entries = [], []
+    total_entries, max_entries, dated_totals = [], [], []
     for name, entry in BASELINES.items():
         encode_fn, order_fn, sizes = entry["encode"], entry["order"], entry["sizes"]
         label, module = entry["label"], entry["module"]
@@ -179,9 +197,10 @@ def compute_our_entries():
         print(f"{name} ({status}): max={maxes}")
         total_entries.append((label, link, totals))
         max_entries.append((label, link, maxes))
+        dated_totals.append((name, entry["submitted_at"], label, totals))
 
     save_score_cache(cache)
-    return total_entries, max_entries
+    return total_entries, max_entries, dated_totals
 
 
 def paper_entries(paper_dict):
@@ -287,12 +306,54 @@ def render_ranked_table(f, title, formula, entries):
     f.write("\n")
 
 
+def write_progress_chart(dated_totals) -> str:
+    """Writes assets/progress_total_weight.png and returns its repo-relative
+    path for embedding in LEADERBOARD.md. Fixed to total Pauli weight at
+    TARGET_SIZE (see scripts/progress_chart.py's module docstring for why
+    just one size, not an aggregate across sizes). Reference lines: our own
+    live-computed JW score at that size, and the best of the paper's four
+    published Table I rows at that size.
+    """
+    size_index = SIZES.index(TARGET_SIZE)
+    points = points_at_size(dated_totals, size_index)
+
+    jw_value = next(
+        (totals.get(size_index) for name, _, _, totals in dated_totals if name == "jw"), None,
+    )
+    paper_best = min(values[size_index] for values in PAPER_TOTAL.values())
+
+    assets_dir = REPO_ROOT / "assets"
+    assets_dir.mkdir(exist_ok=True)
+    out_path = assets_dir / "progress_total_weight.png"
+    render_progress_chart(
+        points,
+        [("JW", jw_value), ("Best of Table I [1]", paper_best)],
+        out_path,
+        title=f"Total Pauli weight, {TARGET_SIZE}x{TARGET_SIZE} lattice",
+        ylabel="Total Pauli weight",
+    )
+    print(f"wrote {out_path}")
+    return f"assets/{out_path.name}"
+
+
 def main():
-    our_totals, our_maxes = compute_our_entries()
+    our_totals, our_maxes, dated_totals = compute_our_entries()
+    chart_path = write_progress_chart(dated_totals)
 
     leaderboard_path = REPO_ROOT / "LEADERBOARD.md"
     with open(leaderboard_path, "w") as f:
         f.write("# Leaderboard -- square grids, 3x3 to 15x15\n\n")
+        f.write(
+            f"![Total Pauli weight progress at {TARGET_SIZE}x{TARGET_SIZE}]({chart_path})\n\n"
+            f"Best total Pauli weight reached so far at "
+            f"{TARGET_SIZE}x{TARGET_SIZE}, plotted against submission date -- "
+            "a new point only appears if it's a strict improvement on the prior "
+            "record. Dashed lines are the JW "
+            "reference and the best of arXiv 2504.21636's own published Table I "
+            "rows at this size. Fixed to one size because a submission can win "
+            "at one lattice size and lose at another -- see the full tables "
+            "below for the complete picture across 3x3..15x15.\n\n"
+        )
         f.write(
             "Generated by `scripts/update_leaderboard.py` — **do not hand-edit this "
             "file**. Rows are rank positions, not fixed encodings: row 1 is whoever "
