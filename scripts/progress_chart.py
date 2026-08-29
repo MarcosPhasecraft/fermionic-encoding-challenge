@@ -180,14 +180,20 @@ def render_progress_chart(points, reference_lines, out_path, title, ylabel):
     # Reference lines are labelled inline, right at the line's own height
     # (not via a legend) -- a legend's automatic placement has no way to
     # know where the dashed lines actually sit and can end up drawn right
-    # on top of one.
+    # on top of one. The value is spelled out in the label itself (not just
+    # left to be read off the y-axis) because a reference line can land
+    # close enough to an unrelated record point's own value that the two
+    # are easy to conflate -- e.g. our own bk baseline (13,988) sits only
+    # 46 apart from the paper's actual best (13,942) at 15x15, close enough
+    # on this scale to misread one point's annotation as the other line's
+    # value.
     trans = ax.get_yaxis_transform()
     for (label, value), color in zip(reference_lines, REFERENCE_COLORS):
         if value is None:
             continue
         ax.axhline(value, color=color, linestyle=(0, (6, 4)), linewidth=1.5, zorder=2)
         ax.text(
-            1.015, value, label, transform=trans, color=color, fontsize=9,
+            1.015, value, f"{label}: {value:,}", transform=trans, color=color, fontsize=9,
             va="center", ha="left", clip_on=False,
         )
 
