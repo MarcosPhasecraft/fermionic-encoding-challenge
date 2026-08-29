@@ -120,8 +120,8 @@ sending it over.)
 ## How to play
 
 ```bash
-git clone https://github.com/MarcosPhasecraft/fermionic_encodings_harness.git
-cd fermionic_encodings_harness
+git clone https://github.com/MarcosPhasecraft/fermionic-encoding-challenge.git
+cd fermionic-encoding-challenge
 pip install -r requirements.txt
 ```
 
