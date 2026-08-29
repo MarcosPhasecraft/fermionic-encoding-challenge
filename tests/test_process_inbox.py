@@ -159,12 +159,24 @@ def test_files_touched_omits_leaderboard_and_memory_index_when_skipped():
     assert "LEADERBOARD.md" not in touched
     assert "MEMORY.md" not in touched
     assert "assets/progress_total_weight.png" not in touched
+    assert "_leaderboard_body.md" not in touched
 
 
 def test_files_touched_includes_progress_chart_when_not_skipped():
     accepted = [{"name": "alice", "has_memory": False}]
     touched = process_inbox._files_touched(accepted, skip_leaderboard=False)
     assert "assets/progress_total_weight.png" in touched
+
+
+def test_files_touched_includes_leaderboard_body_when_not_skipped():
+    # Without this, the Pages site silently goes stale: LEADERBOARD.md and
+    # the chart get committed correctly, but _leaderboard_body.md -- the
+    # file the website actually reads via {% include_relative %} -- was
+    # regenerated on disk and then never staged, so origin/main's copy
+    # (and the site built from it) keeps showing the previous submission.
+    accepted = [{"name": "alice", "has_memory": False}]
+    touched = process_inbox._files_touched(accepted, skip_leaderboard=False)
+    assert "_leaderboard_body.md" in touched
 
 
 # --- _prewarm_leaderboard_cache: without this, a brand-new submission's

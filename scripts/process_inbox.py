@@ -131,7 +131,10 @@ def _files_touched(accepted: list[dict], skip_leaderboard: bool) -> list[str]:
     """
     touched = ["baselines/registry.json"]
     if not skip_leaderboard:
-        touched += ["LEADERBOARD.md", "MEMORY.md", "assets/progress_total_weight.png"]
+        touched += [
+            "LEADERBOARD.md", "MEMORY.md", "assets/progress_total_weight.png",
+            "_leaderboard_body.md",
+        ]
     for r in accepted:
         touched.append(f"baselines/{r['name']}.py")
         if r["has_memory"]:

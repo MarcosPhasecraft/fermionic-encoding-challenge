@@ -372,7 +372,8 @@ def render_leaderboard_body(f, chart_path, our_totals, our_maxes):
     f.write(
         "## References\n\n"
         "[1] Chiew, Ibrahim, Safro, Strelchuk, *Optimal fermion-qubit mappings "
-        "via quadratic assignment*, arXiv 2504.21636. Code: "
+        "via quadratic assignment*, [arXiv 2504.21636]"
+        "(https://arxiv.org/abs/2504.21636). Code: "
         "[`github.com/cameton/QCE_QubitAssignment`]"
         "(https://github.com/cameton/QCE_QubitAssignment).\n"
     )
