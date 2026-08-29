@@ -1,5 +1,7 @@
 # The Fermionic Encoding Challenge
 
+**[Live leaderboard →](https://marcosphasecraft.github.io/fermionic-encoding-challenge/)**
+
 > **Goal.** Write the fermion-to-qubit encoding that produces the
 > lowest-weight qubit Hamiltonian for a given fermionic lattice, scored on
 > **total Pauli weight** and **maximum Pauli weight** — two independent
@@ -19,9 +21,9 @@ qubit (Pauli) operators. Different valid encodings optimize different
 things, and can produce wildly different **Pauli weight** — the qubit cost
 driving circuit depth and measurement cost — for the exact same physics.
 In one dimension the optimal choice is well understood; in two dimensions,
-on the lattices that actually describe real materials, it isn't. Recent
-work (arXiv 2504.21636, our primary reference) has started mapping out
-that space, but nobody knows what the best 2D encoding actually looks like.
+on the lattices that actually describe real materials, it isn't. We take
+arXiv 2504.21636 as our primary reference and baseline for this
+challenge.
 
 ## The benchmark, precisely
 
