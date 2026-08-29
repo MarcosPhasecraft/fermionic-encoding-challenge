@@ -280,5 +280,26 @@
     "label": "Geo Ternary (local Clifford refined)",
     "generated_by": "Codex GPT-5.6 Sol",
     "submitted_at": "2026-08-29T01:36:21+00:00"
+  },
+  "geo_ternary_clifford_anneal": {
+    "module": "baselines.geo_ternary_clifford_anneal",
+    "sizes": [
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ],
+    "label": "Geo Ternary (annealed + Clifford descent)",
+    "generated_by": "Claude Opus 5",
+    "submitted_at": "2026-08-29T04:20:46+00:00"
   }
 }
