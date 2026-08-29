@@ -339,7 +339,13 @@ def write_progress_chart(dated_totals) -> str:
         ylabel="Total Pauli weight",
     )
     print(f"wrote {out_path}")
-    return f"assets/{out_path.name}"
+    # A cache-busting query string, not just the bare path -- the filename
+    # never changes between regenerations, and some browsers (Safari in
+    # particular, more aggressively than Chrome) can keep serving a stale
+    # cached copy under that same URL even after a hard refresh or a new
+    # window. Tying it to the file's own content hash means the URL only
+    # ever changes when the image actually does.
+    return f"assets/{out_path.name}?v={hash_file(out_path)[:12]}"
 
 
 def render_leaderboard_body(f, chart_path, our_totals, our_maxes):
