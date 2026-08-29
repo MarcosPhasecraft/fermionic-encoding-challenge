@@ -1,8 +1,0 @@
-{
-  "name": "rectangle_2x1_row_major",
-  "Lx": 2,
-  "Ly": 1,
-  "M": 2,
-  "edges": [[0, 1]],
-  "coords": {"0": [0, 0], "1": [1, 0]}
-}

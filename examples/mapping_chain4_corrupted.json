@@ -1,5 +1,0 @@
-{
-  "n_qubits": 4,
-  "majoranas": ["XIII", "YIII", "XXII", "ZYII", "ZZXI", "ZZYI", "ZZZX", "ZZZY"],
-  "stabilizers": []
-}
