@@ -40,6 +40,15 @@ at baselines/<name>.memory/, exactly like ecdsa.fail's own shared memory
 notes; unlike everything else in baselines/, it's unverified prose, not
 code the harness runs, so treat it as leads rather than proven fact.
 
+Each accepted submission's just-computed scores are also written straight
+into update_leaderboard.py's score cache (_prewarm_leaderboard_cache) --
+without this, a brand-new submission would get scored twice in the same
+run: once here to decide pass/fail, and again moments later when
+update_leaderboard.py runs as a separate subprocess with no memory of
+what this process just computed. Only matters for a submission whose
+encode() does real work (a search, an ensemble of restarts), but it does
+matter then.
+
 If anything was newly accepted this run: LEADERBOARD.md is regenerated
 (scripts/update_leaderboard.py, run as a fresh subprocess so it reads the
 just-written registry.json with no stale-import risk), the full test
@@ -84,6 +93,33 @@ from harness.loading import load_submission
 INBOX = REPO_ROOT / "inbox"
 PROCESSED = INBOX / "_processed"
 _IGNORED_DIR_NAMES = {"_processed", "__pycache__"}
+
+
+def _prewarm_leaderboard_cache(name: str, dest: Path, scores: dict) -> None:
+    """Writes what _process_one just computed for `name` straight into
+    scripts/update_leaderboard.py's score cache, keyed the same way that
+    script keys it itself (a hash of `dest`'s contents). Without this, a
+    brand-new submission's scores -- already computed once, to decide
+    pass/fail -- would be recomputed a second time moments later when
+    update_leaderboard.py runs as a separate subprocess with no memory of
+    what this process just did, which is wasteful for anything whose
+    encode() does real work (a search, an ensemble of restarts).
+
+    Skipped (not an error, just a no-op) if the cache's own stored
+    harness/ fingerprint doesn't match the current one: in that case
+    update_leaderboard.py is about to discard the whole cache and rebuild
+    it from scratch anyway (see its module docstring), so writing one
+    entry into a cache that's about to be wiped would accomplish nothing.
+    """
+    cache = submission_lib.load_score_cache()
+    current_harness_fp = submission_lib.harness_fingerprint()
+    if cache.get("_harness_fingerprint") != current_harness_fp:
+        return
+    cache.setdefault("entries", {})[name] = {
+        "fingerprint": submission_lib.hash_file(dest),
+        "scores": {str(l): s for l, s in scores.items()},
+    }
+    submission_lib.save_score_cache(cache)
 
 
 def _files_touched(accepted: list[dict], skip_leaderboard: bool) -> list[str]:
@@ -162,6 +198,7 @@ def _process_one(folder: Path, registry: dict) -> dict:
             generated_by=manifest.get("generated_by"), submitted_at=submitted_at,
         )
         save_registry(registry)
+        _prewarm_leaderboard_cache(name, dest, scores)
 
         # Archived under <timestamp>_<name> -- sortable by acceptance
         # order, and name alone (already a clean identifier by

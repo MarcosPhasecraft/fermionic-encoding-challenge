@@ -52,20 +52,24 @@ Run this after adding or improving a baseline. LEADERBOARD.md is a
 generated artifact -- never hand-edit it.
 """
 
-import hashlib
-import json
 import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).parent.parent.resolve()
 sys.path.insert(0, str(REPO_ROOT))
 
+# Imported as scripts.submission_lib (not bare `submission_lib`), matching
+# scripts/process_inbox.py's convention -- see that file's comment for why
+# the distinction matters (module identity, not just resolvability). Tests
+# that need to redirect the cache file monkeypatch
+# scripts.submission_lib.CACHE_PATH directly, not a copy here.
+from scripts.submission_lib import harness_fingerprint, hash_file, load_score_cache, save_score_cache
+
 from baselines import BASELINES
 from harness.evaluate import evaluate
 from harness.lattice import build_spec, hamiltonian
 
 SIZES = list(range(3, 16))
-CACHE_PATH = REPO_ROOT / ".leaderboard_cache.json"
 
 # arXiv 2504.21636 Table I, verbatim from the LaTeX source (main.tex, the
 # \begin{table*}...\end{table*} block labeled tab:lattice), for L=3..15.
@@ -100,37 +104,6 @@ def evaluate_baseline(encode_fn, order_fn, lx, ly):
     if not result["passed"]:
         raise RuntimeError(f"{encode_fn} failed verify() at {lx}x{ly}: {result}")
     return result["total_weight"], result["max_weight"]
-
-
-def _hash_file(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
-def _harness_fingerprint() -> str:
-    """Hash of every harness/*.py file's content, sorted by filename for
-    determinism. Gates the whole cache at once (see module docstring) --
-    a baseline's score can depend on any harness utility its encode()/
-    order() calls into, not just the scoring functions proper, so there's
-    no safe way to track "which files affect which baseline" per-entry.
-    """
-    hasher = hashlib.sha256()
-    for path in sorted((REPO_ROOT / "harness").glob("*.py")):
-        hasher.update(path.name.encode())
-        hasher.update(path.read_bytes())
-    return hasher.hexdigest()
-
-
-def _load_cache() -> dict:
-    if not CACHE_PATH.is_file():
-        return {}
-    try:
-        return json.loads(CACHE_PATH.read_text())
-    except json.JSONDecodeError:
-        return {}
-
-
-def _save_cache(cache: dict) -> None:
-    CACHE_PATH.write_text(json.dumps(cache, indent=2) + "\n")
 
 
 def scored_with_cache(name, encode_fn, order_fn, sizes, file_fp, cache_entries):
@@ -182,8 +155,8 @@ def compute_our_entries():
     hash, gated by a whole-harness/ hash) and scored_with_cache for the
     actual per-baseline hit/miss decision.
     """
-    cache = _load_cache()
-    harness_fp = _harness_fingerprint()
+    cache = load_score_cache()
+    harness_fp = harness_fingerprint()
     if cache.get("_harness_fingerprint") != harness_fp:
         # Something in harness/ changed since the cache was written -- every
         # previously cached score is potentially stale, so start clean.
@@ -195,7 +168,7 @@ def compute_our_entries():
         encode_fn, order_fn, sizes = entry["encode"], entry["order"], entry["sizes"]
         label, module = entry["label"], entry["module"]
         link = source_link(module)
-        file_fp = _hash_file(REPO_ROOT / f"{module.replace('.', '/')}.py")
+        file_fp = hash_file(REPO_ROOT / f"{module.replace('.', '/')}.py")
 
         totals, maxes, any_recomputed = scored_with_cache(
             name, encode_fn, order_fn, sizes, file_fp, cache["entries"],
@@ -207,7 +180,7 @@ def compute_our_entries():
         total_entries.append((label, link, totals))
         max_entries.append((label, link, maxes))
 
-    _save_cache(cache)
+    save_score_cache(cache)
     return total_entries, max_entries
 
 

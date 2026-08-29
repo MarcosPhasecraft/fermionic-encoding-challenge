@@ -83,67 +83,6 @@ def test_new_size_under_same_fingerprint_only_computes_the_new_one(monkeypatch):
     assert any_recomputed is True
     assert calls == [4]  # size 3 reused, not recomputed
 
-
-# --- _hash_file ---
-
-
-def test_hash_file_same_content_same_hash(tmp_path):
-    f1, f2 = tmp_path / "a.py", tmp_path / "b.py"
-    f1.write_text("x = 1\n")
-    f2.write_text("x = 1\n")
-    assert update_leaderboard._hash_file(f1) == update_leaderboard._hash_file(f2)
-
-
-def test_hash_file_different_content_different_hash(tmp_path):
-    f1, f2 = tmp_path / "a.py", tmp_path / "b.py"
-    f1.write_text("x = 1\n")
-    f2.write_text("x = 2\n")
-    assert update_leaderboard._hash_file(f1) != update_leaderboard._hash_file(f2)
-
-
-# --- _harness_fingerprint ---
-
-
-def test_harness_fingerprint_is_deterministic():
-    assert update_leaderboard._harness_fingerprint() == update_leaderboard._harness_fingerprint()
-
-
-def test_harness_fingerprint_changes_when_a_harness_file_changes(tmp_path, monkeypatch):
-    harness_dir = tmp_path / "harness"
-    harness_dir.mkdir()
-    (harness_dir / "a.py").write_text("x = 1\n")
-    monkeypatch.setattr(update_leaderboard, "REPO_ROOT", tmp_path)
-
-    fp1 = update_leaderboard._harness_fingerprint()
-    (harness_dir / "a.py").write_text("x = 2\n")
-    fp2 = update_leaderboard._harness_fingerprint()
-
-    assert fp1 != fp2
-
-
-# --- _load_cache / _save_cache ---
-
-
-def test_load_cache_missing_file_returns_empty_dict(tmp_path, monkeypatch):
-    monkeypatch.setattr(update_leaderboard, "CACHE_PATH", tmp_path / "nope.json")
-    assert update_leaderboard._load_cache() == {}
-
-
-def test_load_cache_corrupt_json_returns_empty_dict(tmp_path, monkeypatch):
-    path = tmp_path / "bad.json"
-    path.write_text("not json{{{")
-    monkeypatch.setattr(update_leaderboard, "CACHE_PATH", path)
-    assert update_leaderboard._load_cache() == {}
-
-
-def test_save_and_load_cache_roundtrip(tmp_path, monkeypatch):
-    path = tmp_path / "cache.json"
-    monkeypatch.setattr(update_leaderboard, "CACHE_PATH", path)
-    data = {"_harness_fingerprint": "abc", "entries": {"jw": {"fingerprint": "x", "scores": {}}}}
-    update_leaderboard._save_cache(data)
-    assert update_leaderboard._load_cache() == data
-
-
 # --- collect_memory_entries / write_memory_index ---
 
 

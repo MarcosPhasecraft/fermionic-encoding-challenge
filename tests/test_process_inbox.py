@@ -1,10 +1,13 @@
 """Light end-to-end test for scripts/process_inbox.py -- runs the real
 pipeline logic (real verify(), real registry read/write) against a fully
-isolated temp inbox/registry/baselines directory via monkeypatching, so it
-never touches this repo's actual inbox/, baselines/, or registry.json.
-Feeds "none" to the git prompt so no git command ever runs, and passes
---skip-tests --skip-leaderboard so it doesn't spawn a nested pytest run or
-an expensive leaderboard regen.
+isolated temp inbox/registry/baselines/leaderboard-cache directory via
+monkeypatching, so it never touches this repo's actual inbox/, baselines/,
+registry.json, or .leaderboard_cache.json (the last of these was caught
+leaking real entries while first adding _prewarm_leaderboard_cache, before
+_isolate() below monkeypatched CACHE_PATH too). Feeds "none" to the git
+prompt so no git command ever runs, and passes --skip-tests
+--skip-leaderboard so it doesn't spawn a nested pytest run or an expensive
+leaderboard regen.
 """
 
 import json
@@ -33,6 +36,12 @@ def _isolate(tmp_path, monkeypatch):
     registry_path.write_text("{}\n")
     monkeypatch.setattr(submission_lib, "BASELINES_DIR", baselines_dir)
     monkeypatch.setattr(submission_lib, "REGISTRY_PATH", registry_path)
+    # Isolate the leaderboard score cache too -- _process_one's acceptance
+    # path calls _prewarm_leaderboard_cache, which reads/writes it. Without
+    # this, every accepted-submission test here would leak an entry into
+    # this repo's real .leaderboard_cache.json (caught happening for real
+    # while adding this fix).
+    monkeypatch.setattr(submission_lib, "CACHE_PATH", tmp_path / "leaderboard_cache.json")
 
     inbox_dir = tmp_path / "inbox"
     monkeypatch.setattr(process_inbox, "INBOX", inbox_dir)
@@ -149,3 +158,62 @@ def test_files_touched_omits_leaderboard_and_memory_index_when_skipped():
     touched = process_inbox._files_touched(accepted, skip_leaderboard=True)
     assert "LEADERBOARD.md" not in touched
     assert "MEMORY.md" not in touched
+
+
+# --- _prewarm_leaderboard_cache: without this, a brand-new submission's
+# scores -- already computed once here to decide pass/fail -- would be
+# recomputed a second time when update_leaderboard.py runs moments later
+# as a separate subprocess with no memory of what this process just did.
+
+
+def test_prewarm_writes_a_valid_entry_when_harness_fingerprint_matches(tmp_path, monkeypatch):
+    cache_path = tmp_path / "cache.json"
+    real_fp = submission_lib.harness_fingerprint()  # not mocked -- the real, current one
+    cache_path.write_text(json.dumps({"_harness_fingerprint": real_fp, "entries": {}}))
+    monkeypatch.setattr(submission_lib, "CACHE_PATH", cache_path)
+
+    dest = tmp_path / "alice.py"
+    dest.write_text("from baselines.jw import encode\n")
+
+    process_inbox._prewarm_leaderboard_cache("alice", dest, {3: {"total": 201, "max": 4}})
+
+    cache = json.loads(cache_path.read_text())
+    assert cache["entries"]["alice"]["fingerprint"] == submission_lib.hash_file(dest)
+    assert cache["entries"]["alice"]["scores"]["3"] == {"total": 201, "max": 4}
+
+
+def test_prewarm_is_a_noop_when_harness_fingerprint_does_not_match(tmp_path, monkeypatch):
+    # The cache is about to be wiped wholesale by update_leaderboard.py's
+    # own harness-fingerprint check anyway -- pre-populating one entry
+    # into it would accomplish nothing.
+    cache_path = tmp_path / "cache.json"
+    cache_path.write_text(json.dumps({"_harness_fingerprint": "stale-fingerprint", "entries": {}}))
+    monkeypatch.setattr(submission_lib, "CACHE_PATH", cache_path)
+
+    dest = tmp_path / "alice.py"
+    dest.write_text("from baselines.jw import encode\n")
+
+    process_inbox._prewarm_leaderboard_cache("alice", dest, {3: {"total": 201, "max": 4}})
+
+    cache = json.loads(cache_path.read_text())
+    assert cache["entries"] == {}
+
+
+def test_accepted_submission_prewarms_the_cache_end_to_end(tmp_path, monkeypatch):
+    baselines_dir, registry_path, inbox_dir = _isolate(tmp_path, monkeypatch)
+    # Seed the isolated cache as already valid (matching the real current
+    # harness fingerprint) -- otherwise this test can't distinguish
+    # "correctly pre-warmed" from "correctly skipped because stale",
+    # both of which leave the assertion-relevant entries dict looking
+    # different, but only one of which is the scenario under test here.
+    real_fp = submission_lib.harness_fingerprint()
+    submission_lib.CACHE_PATH.write_text(json.dumps({"_harness_fingerprint": real_fp, "entries": {}}))
+
+    _write_submission(inbox_dir, "sub_1", "pytest_smoke_prewarm", "Pytest Smoke (prewarm)")
+
+    process_inbox.main()
+
+    cache = json.loads(submission_lib.CACHE_PATH.read_text())
+    entry = cache["entries"]["pytest_smoke_prewarm"]
+    assert entry["fingerprint"] == submission_lib.hash_file(baselines_dir / "pytest_smoke_prewarm.py")
+    assert entry["scores"]["3"] == {"total": 201, "max": 4}  # JW at 3x3, from the baselines.jw re-export

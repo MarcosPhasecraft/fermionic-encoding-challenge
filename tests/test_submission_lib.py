@@ -1,10 +1,13 @@
 """Tests for scripts/submission_lib.py -- the validation logic shared by
-scripts/submit_baseline.py and scripts/process_inbox.py. Pure functions,
-no verify()/evaluate() calls, so these stay in the sub-second range.
+scripts/submit_baseline.py and scripts/process_inbox.py, and the
+leaderboard score-cache primitives shared by scripts/process_inbox.py and
+scripts/update_leaderboard.py. Pure functions, no verify()/evaluate()
+calls, so these stay in the sub-second range.
 """
 
 import pytest
 
+import scripts.submission_lib as submission_lib
 from scripts.submission_lib import (
     SubmissionRejected,
     validate_encode_source,
@@ -136,3 +139,63 @@ def test_duplicate_helper_function_rejected():
 def test_syntax_error_rejected():
     with pytest.raises(SubmissionRejected, match="syntax error"):
         validate_encode_source("def encode(spec:\n    return {}\n")
+
+
+# --- hash_file ---
+
+
+def test_hash_file_same_content_same_hash(tmp_path):
+    f1, f2 = tmp_path / "a.py", tmp_path / "b.py"
+    f1.write_text("x = 1\n")
+    f2.write_text("x = 1\n")
+    assert submission_lib.hash_file(f1) == submission_lib.hash_file(f2)
+
+
+def test_hash_file_different_content_different_hash(tmp_path):
+    f1, f2 = tmp_path / "a.py", tmp_path / "b.py"
+    f1.write_text("x = 1\n")
+    f2.write_text("x = 2\n")
+    assert submission_lib.hash_file(f1) != submission_lib.hash_file(f2)
+
+
+# --- harness_fingerprint ---
+
+
+def test_harness_fingerprint_is_deterministic():
+    assert submission_lib.harness_fingerprint() == submission_lib.harness_fingerprint()
+
+
+def test_harness_fingerprint_changes_when_a_harness_file_changes(tmp_path, monkeypatch):
+    harness_dir = tmp_path / "harness"
+    harness_dir.mkdir()
+    (harness_dir / "a.py").write_text("x = 1\n")
+    monkeypatch.setattr(submission_lib, "REPO_ROOT", tmp_path)
+
+    fp1 = submission_lib.harness_fingerprint()
+    (harness_dir / "a.py").write_text("x = 2\n")
+    fp2 = submission_lib.harness_fingerprint()
+
+    assert fp1 != fp2
+
+
+# --- load_score_cache / save_score_cache ---
+
+
+def test_load_score_cache_missing_file_returns_empty_dict(tmp_path, monkeypatch):
+    monkeypatch.setattr(submission_lib, "CACHE_PATH", tmp_path / "nope.json")
+    assert submission_lib.load_score_cache() == {}
+
+
+def test_load_score_cache_corrupt_json_returns_empty_dict(tmp_path, monkeypatch):
+    path = tmp_path / "bad.json"
+    path.write_text("not json{{{")
+    monkeypatch.setattr(submission_lib, "CACHE_PATH", path)
+    assert submission_lib.load_score_cache() == {}
+
+
+def test_save_and_load_score_cache_roundtrip(tmp_path, monkeypatch):
+    path = tmp_path / "cache.json"
+    monkeypatch.setattr(submission_lib, "CACHE_PATH", path)
+    data = {"_harness_fingerprint": "abc", "entries": {"jw": {"fingerprint": "x", "scores": {}}}}
+    submission_lib.save_score_cache(data)
+    assert submission_lib.load_score_cache() == data

@@ -3,9 +3,18 @@ mapping against the harness -- used by both scripts/submit_baseline.py
 (manual, one file at a time) and scripts/process_inbox.py (the fully
 automated inbox pipeline), so "what counts as passing" has exactly one
 implementation, not two that could drift.
+
+Also holds scripts/update_leaderboard.py's score-cache primitives
+(hash_file/harness_fingerprint/load_score_cache/save_score_cache), for the
+same reason: scripts/process_inbox.py needs them too, to pre-warm the
+cache with a just-accepted submission's scores (already computed once, to
+gate acceptance) so the leaderboard regeneration step -- a separate
+subprocess with no memory of what the parent just computed -- doesn't pay
+for a potentially expensive encode() a second time in the same run.
 """
 
 import ast
+import hashlib
 import json
 import re
 import sys
@@ -20,6 +29,7 @@ from harness.lattice import build_spec, hamiltonian
 
 BASELINES_DIR = REPO_ROOT / "baselines"
 REGISTRY_PATH = BASELINES_DIR / "registry.json"
+CACHE_PATH = REPO_ROOT / ".leaderboard_cache.json"
 MIN_SIZE, MAX_SIZE = 3, 15
 NAME_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 
@@ -178,3 +188,35 @@ def check_at_size(encode_fn, order_fn, l: int) -> tuple[int, int]:
     if not result["passed"]:
         raise SubmissionRejected(f"FAILED at {l}x{l}: {summarize_failure(result)}")
     return result["total_weight"], result["max_weight"]
+
+
+def hash_file(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def harness_fingerprint() -> str:
+    """Hash of every harness/*.py file's content, sorted by filename for
+    determinism. Gates the whole leaderboard score cache at once (see
+    scripts/update_leaderboard.py's module docstring) -- a baseline's
+    score can depend on any harness utility its encode()/order() calls
+    into, not just the scoring functions proper, so there's no safe way
+    to track "which files affect which baseline" per-entry.
+    """
+    hasher = hashlib.sha256()
+    for path in sorted((REPO_ROOT / "harness").glob("*.py")):
+        hasher.update(path.name.encode())
+        hasher.update(path.read_bytes())
+    return hasher.hexdigest()
+
+
+def load_score_cache() -> dict:
+    if not CACHE_PATH.is_file():
+        return {}
+    try:
+        return json.loads(CACHE_PATH.read_text())
+    except json.JSONDecodeError:
+        return {}
+
+
+def save_score_cache(cache: dict) -> None:
+    CACHE_PATH.write_text(json.dumps(cache, indent=2) + "\n")
