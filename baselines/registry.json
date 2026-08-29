@@ -301,5 +301,26 @@
     "label": "Geo Ternary (annealed + Clifford descent)",
     "generated_by": "Claude Opus 5",
     "submitted_at": "2026-08-29T04:20:46+00:00"
+  },
+  "ternary_multistage_refinement": {
+    "module": "baselines.ternary_multistage_refinement",
+    "sizes": [
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ],
+    "label": "Ternary (multistage Clifford refined)",
+    "generated_by": "Codex GPT-5.6 Sol",
+    "submitted_at": "2026-08-29T18:43:56+00:00"
   }
 }
