@@ -139,9 +139,15 @@ def encode(spec: dict) -> dict:
     return {
         "n_qubits": n,               # N >= M
         "majoranas": [...],          # 2M Pauli strings, length N, chars from IXYZ
-        "stabilizers": [],           # ancilla-free for now: leave empty
+        "stabilizers": [],           # non-empty only for the ancilla/stabilizer challenge -- see below
     }
 ```
+
+Leave `stabilizers` empty (`N = M`) for this challenge and the graph challenge
+below — that's what most of this section describes. If you're using ancilla
+qubits (`N > M`), see "The ancilla/stabilizer challenge" further down: it's a
+separate challenge with its own submission format and detection mechanism,
+not a variant of this one.
 
 `spec` is a dict with `M` (mode count), `Lx`/`Ly`, `edges` (the fermionic
 interaction graph), and `coords` — everything you need is already in it;
@@ -228,6 +234,75 @@ builds a complete ancilla-free encoding from a single invertible matrix
 `solution/encode.py` is arbitrary Python — verification checks the
 *mapping* it returns, not the code itself. If you're running someone
 else's submission, do it somewhere isolated.
+
+## The ancilla/stabilizer challenge
+
+A separate challenge from everything above, with its own leaderboard
+([`LEADERBOARD_ANCILLAS.md`](LEADERBOARD_ANCILLAS.md)) and its own submission
+format. Everywhere else on this page, "valid" means `N = M` and `stabilizers`
+is empty; here it's the opposite — a submission is expected to use ancilla
+qubits (`N > M`) and a real, non-empty stabilizer group, verified against the
+full set of stabilizer-code checks (pairwise Majorana anticommutation,
+stabilizers mutually commuting, stabilizers commuting with every Majorana,
+and the stabilizer group having exactly the right rank to leave a genuine
+`M`-mode Fock space behind — see `harness/v2/verify.py`).
+
+**The challenge, precisely.** The maximum Pauli weight is fixed at **3** —
+checked at every size a submission claims, not just asserted — and the goal
+is to *minimize the number of ancilla qubits* (`N - M`) needed to reach a
+genuinely valid encoding at that weight. Lower is better. Square lattices
+`3×3` through `15×15` (the same range as the ancilla-free challenge above);
+hexagonal lattices are a valid target too (same sizes as the graph
+challenge's own hexagonal sweep — see
+[`LEADERBOARD_GRAPHS.md`](LEADERBOARD_GRAPHS.md)), accepted, verified, and
+scored identically, but not yet shown on the leaderboard — there's no working
+hexagonal reference construction there yet (see `NOTES.md` if you're curious
+why, or want to take a crack at it yourself).
+
+**The starting point** is [Derby-Klassen](https://arxiv.org/abs/2003.06939)
+(`harness/v2/baselines/dk.py`), reconstructed directly from the paper and
+verified to reproduce its own claimed results exactly (max weight 3, fewer
+than 1.5 qubits per mode) — shown as the dotted reference line on the
+leaderboard's chart. Beating it means using *fewer* ancillas while still
+genuinely hitting weight ≤ 3, not gaming either constraint.
+
+**How a submission is told apart from the others.** `submission.json` gets
+one new field: `"challenge": "ancillas"`. That's the *entire* detection
+mechanism — its presence (and only its presence) routes a submission through
+this challenge's own pipeline (`harness/v2`'s stabilizer-aware verifier and
+scorer) instead of the ancilla-free one; its absence means "business as
+usual" and nothing about how existing submissions are processed changes.
+Concretely:
+
+```json
+{
+  "name": "alice_dk_variant",
+  "label": "Alice's DK Variant",
+  "sizes": "3-15",
+  "challenge": "ancillas",
+  "graph": "square"
+}
+```
+
+`graph` defaults to `"square"` if omitted; set it to `"hexagonal"` to target
+the hexagonal lattice instead (using the graph challenge's own explicit
+`"LxxLy"` sizes grammar there, exactly as in `inbox/README.md`'s existing
+description of that grammar). `encode.py` may additionally define
+`represent(term, raw_pauli, spec, mapping) -> str`, an optional hook for
+proposing a lower-weight, stabilizer-equivalent representative of a specific
+Hamiltonian term — the harness certifies any proposed representative exactly
+before trusting its weight (see `harness/v2/score.py`); without it, the raw
+Majorana product is scored as-is. Full schema, the exact acceptance
+criteria, and how this reaches the leaderboard: see `inbox/README.md`'s own
+"Ancilla/stabilizer challenge" section.
+
+`scripts/run_challenge.py` is this challenge's own local testing CLI (the
+analogue of `run.py evaluate` above):
+
+```bash
+python3 scripts/run_challenge.py ancillas --graph square --max-weight 3 \
+    --sizes 3-15 --solution solution/encode.py
+```
 
 ## Credits
 

@@ -18,3 +18,7 @@ inbox/*
 # state, safely regenerable from scratch (see that script's docstring for
 # the invalidation scheme), not repo content.
 .leaderboard_cache.json
+
+# scripts/update_leaderboard_ancillas.py's own analogue -- same reasoning,
+# separate file (gated by harness_v2_fingerprint(), not harness_fingerprint()).
+.leaderboard_cache_ancillas.json

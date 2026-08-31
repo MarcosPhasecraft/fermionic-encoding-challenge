@@ -47,6 +47,19 @@ Graph challenge (non-square lattices -- note `sizes`' different grammar, and the
 }
 ```
 
+Ancilla/stabilizer challenge (note the added `"challenge"` field -- see its own section below):
+
+```json
+{
+  "name": "alice_dk_variant",
+  "label": "Alice's DK Variant",
+  "sizes": "3-15",
+  "challenge": "ancillas",
+  "graph": "square",
+  "generated_by": "Claude Opus 4.5"
+}
+```
+
 - **`name`** (required) — the registry key and filename:
   `baselines/<name>.py`. Must match `^[a-z][a-z0-9_]*$` (lowercase, starts
   with a letter, only letters/digits/underscore). Rejected outright if it
@@ -128,9 +141,95 @@ Graph challenge (non-square lattices -- note `sizes`' different grammar, and the
   `sizes` string for a `triangular` submission if you want to compete
   directly against `[1]`.
 
+- **`challenge`** (optional) — omit for either of the ancilla-free
+  challenges above (the default). Set to `"ancillas"` to submit to the
+  separate ancilla/stabilizer challenge instead — see its own section
+  below for the full explanation. **This field alone is the entire
+  detection mechanism**: `scripts/process_inbox.py` reads it before doing
+  anything else and routes the whole submission through a completely
+  different pipeline (a different verifier, a different registry file, a
+  different leaderboard) based on nothing but its presence.
+
 The acceptance date is *not* a field you provide — `process_inbox.py`
 stamps it itself, from its own clock, the moment a submission actually
 passes. A self-reported date can't be trusted; a locally-stamped one can.
+
+## Ancilla/stabilizer challenge
+
+A third, structurally different challenge from the two above — see the
+top-level `README.md`'s own "The ancilla/stabilizer challenge" section for
+the player-facing explanation (what the challenge is, why Derby-Klassen is
+the starting point). This section is about the mechanics: how a submission
+here is recognized and processed differently.
+
+**Detection.** `submission.json`'s `"challenge": "ancillas"` field, and
+nothing else. There's no separate manifest filename, no separate inbox
+subfolder convention — the exact same `inbox/<folder>/submission.json` +
+`inbox/<folder>/encode.py` shape as every other submission, just with that
+one field set. `scripts/process_inbox.py` checks it (via a raw JSON peek,
+before any real validation) at the very top of processing each folder, and
+dispatches the *entire rest of that folder's handling* to a separate code
+path (`_process_one_ancilla`, using `scripts/submission_lib.py`'s
+`validate_ancilla_manifest`/`check_ancilla_at_size` instead of
+`validate_manifest`/`check_at_size`) — an ordinary submission's own
+handling is completely untouched by this challenge's existence.
+
+**Extended `encode.py` contract.** `encode(spec) -> mapping` still, but
+`mapping["n_qubits"]` is expected to exceed `spec["M"]` (using ancilla
+qubits) and `mapping["stabilizers"]` is expected to be non-empty — verified
+against the *full* stabilizer-code check suite (`harness/v2/verify.py`:
+Majorana algebra, stabilizers mutually commuting, stabilizers commuting
+with every Majorana, and the stabilizer group's rank exactly matching the
+ancilla count, so the result is a genuine, undegenerate `M`-mode Fock
+space — not the weaker "stabilizers commute with an even number of
+Majoranas" condition, and not a restricted or extended space). `encode.py`
+may additionally define:
+
+```python
+def represent(term, raw_pauli: str, spec: dict, mapping: dict) -> str:
+    ...  # propose a lower-weight, stabilizer-equivalent representative
+```
+
+`term` carries `.category` (`"num"`/`"int"`/`"rehop"`/`"imhop"`),
+`.source` (which mode or edge it came from), and `.majoranas` (the raw
+index tuple) — see `harness/v2/hamiltonian_terms.py`. Any proposed
+representative is certified exactly (its product with the raw Majorana
+term must lie in the stabilizer group, checked via `GF(2)` row-span
+membership — see `harness/v2/score.py`) before its weight is trusted; an
+uncertified proposal fails the submission outright rather than being
+silently ignored or silently accepted. Omit `represent()` entirely and the
+raw Majorana product is scored as-is, exactly like the ancilla-free
+challenges already do.
+
+**Acceptance criterion.** Verification must pass *and* `max_weight <= 3`
+(fixed by the challenge — `ANCILLA_MAX_WEIGHT` in
+`scripts/submission_lib.py`, not a field you set) at every size claimed.
+`sizes`' grammar depends on `graph` exactly as it does for the ancilla-free
+challenges (`graph` omitted or `"square"`: `validate_mixed_sizes`;
+`"hexagonal"`: `validate_shapes`) — `"triangular"` and the periodic variants
+are **not** valid here, unlike the ancilla-free graph challenge, since
+there's no working reference construction for them yet.
+
+**Where it lands.** A passing submission is copied to
+`harness/v2/baselines/<name>.py` (not `baselines/<name>.py`) and registered
+in `harness/v2/baselines/registry.json` (not `baselines/registry.json`) --
+a completely separate namespace, so a name already used in one registry
+doesn't block the same name in the other. If anything was accepted here,
+`scripts/process_inbox.py` regenerates `LEADERBOARD_ANCILLAS.md` (via
+`scripts/update_leaderboard_ancillas.py`) instead of `LEADERBOARD.md` --
+each leaderboard only regenerates if its own challenge actually had an
+acceptance this run. A `memory/` folder works identically to the
+ancilla-free challenges', just landing at
+`harness/v2/baselines/<name>.memory/` instead.
+
+Manual, one-file-at-a-time testing before sending a submission over:
+
+```bash
+python3 scripts/submit_ancilla_baseline.py --file their_encode.py \
+    --name theirname --graph square --sizes 3-15 --label "Their DK Variant"
+```
+
+the ancilla-challenge analogue of `scripts/submit_baseline.py`.
 
 ## `encode.py`
 
@@ -140,7 +239,11 @@ top-level function name defined more than once. That last rule exists
 specifically to catch a file that's had an earlier submission's code
 pasted in alongside the new one — `scripts/process_inbox.py` parses the
 file (without running it) and rejects anything that looks like that,
-before ever executing a line of it.
+before ever executing a line of it. For the ancilla/stabilizer challenge
+only, an optional `def represent(term, raw_pauli, spec, mapping) -> str`
+is allowed too (see that challenge's own section below) -- for every other
+challenge, a top-level `represent` binding is just an unused extra name
+(harmless, but never called).
 
 See the top-level `README.md`'s "How to play" section for the full
 `encode(spec)`/`order(Lx, Ly)` contract.
@@ -176,7 +279,9 @@ if a submission passes, registers it and moves its folder to
 `encode.py` are archived there unchanged). A submission that fails is left
 exactly where it is — fix it and run the command again.
 
-If anything was accepted, the script regenerates `LEADERBOARD.md`,
-`LEADERBOARD_GRAPHS.md`, and `MEMORY.md`, re-runs the test suite, prints a
-summary, and only then asks you — on the terminal, not through an AI —
-whether to push, commit locally, or do neither.
+If anything was accepted, the script regenerates whichever leaderboard(s)
+actually had an acceptance this run (`LEADERBOARD.md`/`LEADERBOARD_GRAPHS.md`/
+`MEMORY.md` for the ancilla-free challenges, `LEADERBOARD_ANCILLAS.md` for
+the ancilla/stabilizer challenge -- see its own section above), re-runs the
+test suite, prints a summary, and only then asks you — on the terminal, not
+through an AI — whether to push, commit locally, or do neither.

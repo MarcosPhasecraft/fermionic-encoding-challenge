@@ -95,12 +95,15 @@ ACCENT = "#3A5CE0"
 REFERENCE_COLORS = ["#E4572E", "#2A9D8F"]  # coral, teal -- distinct from ACCENT and each other
 
 
-def render_progress_chart(points, reference_lines, out_path, title, ylabel):
+def render_progress_chart(points, reference_lines, out_path, title, ylabel, linestyles=None):
     """points: [(submitted_at_iso, value, label), ...] -- every submission
     scored at the target size (only compute_staircase's winners are drawn;
     the rest exist here just to anchor the line's right edge to the latest
     submission date). reference_lines: [(label, value_or_None), ...] --
-    horizontal dashed lines (JW, paper-best); a None value is skipped.
+    horizontal reference lines (JW, paper-best); a None value is skipped.
+    linestyles: optional list of matplotlib dash-pattern tuples, one per
+    reference line -- defaults to every existing caller's own dashed style
+    ((0, (6, 4))) when omitted, so this parameter is purely additive.
     Writes a PNG to out_path.
     """
     import matplotlib
@@ -187,11 +190,12 @@ def render_progress_chart(points, reference_lines, out_path, title, ylabel):
     # 46 apart from the paper's actual best (13,942) at 15x15, close enough
     # on this scale to misread one point's annotation as the other line's
     # value.
+    styles = linestyles if linestyles is not None else [(0, (6, 4))] * len(reference_lines)
     trans = ax.get_yaxis_transform()
-    for (label, value), color in zip(reference_lines, REFERENCE_COLORS):
+    for (label, value), color, style in zip(reference_lines, REFERENCE_COLORS, styles):
         if value is None:
             continue
-        ax.axhline(value, color=color, linestyle=(0, (6, 4)), linewidth=1.5, zorder=2)
+        ax.axhline(value, color=color, linestyle=style, linewidth=1.5, zorder=2)
         ax.text(
             1.015, value, f"{label}: {value:,}", transform=trans, color=color, fontsize=9,
             va="center", ha="left", clip_on=False,

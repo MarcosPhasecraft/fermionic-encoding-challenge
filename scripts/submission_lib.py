@@ -320,12 +320,162 @@ def harness_fingerprint() -> str:
     score can depend on any harness utility its encode()/order() calls
     into, not just the scoring functions proper, so there's no safe way
     to track "which files affect which baseline" per-entry.
+
+    Path.glob("*.py") is non-recursive, so harness/v2/ (the ancilla/
+    stabilizer extension) is invisible to this -- deliberately: it lives
+    in its own subpackage specifically so its existence, or any change to
+    it, never invalidates this cache. See harness_v2_fingerprint() below
+    for its own, separate analogue.
     """
     hasher = hashlib.sha256()
     for path in sorted((REPO_ROOT / "harness").glob("*.py")):
         hasher.update(path.name.encode())
         hasher.update(path.read_bytes())
     return hasher.hexdigest()
+
+
+# ---------------------------------------------------------------------------
+# Ancilla/stabilizer challenge (harness.v2) -- additive to everything above.
+# A submission here declares "challenge": "ancillas" in submission.json (see
+# inbox/README.md); scripts/process_inbox.py dispatches on that field before
+# ever touching the functions above, so an ordinary square/graph submission's
+# path through this module is completely unchanged.
+# ---------------------------------------------------------------------------
+
+ANCILLA_MAX_WEIGHT = 3  # fixed by the challenge itself -- not submission-configurable
+ANCILLA_GRAPH_TYPES = {"square", "hexagonal"}
+ANCILLA_BASELINES_DIR = REPO_ROOT / "harness" / "v2" / "baselines"
+ANCILLA_REGISTRY_PATH = ANCILLA_BASELINES_DIR / "registry.json"
+ANCILLA_CACHE_PATH = REPO_ROOT / ".leaderboard_cache_ancillas.json"
+
+
+def harness_v2_fingerprint() -> str:
+    """The ancilla challenge's own analogue of harness_fingerprint(): hashes
+    harness/v2/*.py (non-recursive, so harness/v2/baselines/ -- the
+    ancilla-challenge equivalent of baselines/, individually hashed per
+    submission the same way baselines/*.py already are -- is excluded, same
+    split as harness/ vs baselines/ proper). Gates .leaderboard_cache_ancillas.json.
+    """
+    hasher = hashlib.sha256()
+    for path in sorted((REPO_ROOT / "harness" / "v2").glob("*.py")):
+        hasher.update(path.name.encode())
+        hasher.update(path.read_bytes())
+    return hasher.hexdigest()
+
+
+def load_ancilla_registry() -> dict:
+    if not ANCILLA_REGISTRY_PATH.is_file():
+        return {}
+    return json.loads(ANCILLA_REGISTRY_PATH.read_text())
+
+
+def save_ancilla_registry(registry: dict) -> None:
+    ANCILLA_BASELINES_DIR.mkdir(parents=True, exist_ok=True)
+    ANCILLA_REGISTRY_PATH.write_text(json.dumps(registry, indent=2) + "\n")
+
+
+def ancilla_registry_entry(
+    name: str, sizes: list, label: str, graph: str, has_represent: bool,
+    generated_by=None, submitted_at=None,
+) -> dict:
+    entry = {
+        "module": f"harness.v2.baselines.{name}", "sizes": sizes, "label": label,
+        "graph": graph, "has_represent": has_represent,
+    }
+    if generated_by is not None:
+        entry["generated_by"] = generated_by
+    if submitted_at is not None:
+        entry["submitted_at"] = submitted_at
+    return entry
+
+
+def validate_ancilla_manifest(manifest: dict) -> dict:
+    """Like validate_manifest, but for a "challenge": "ancillas" submission
+    -- a separate function, not a branch inside validate_manifest, since the
+    allowed graph choices (square/hexagonal only, no triangular or periodic
+    variants -- see NOTES.md) and the fixed max_weight differ from the
+    ancilla-free challenges' own manifest shape.
+    """
+    if not isinstance(manifest, dict):
+        raise SubmissionRejected(f"submission.json must be a JSON object, got {manifest!r}")
+
+    for key in ("name", "label", "sizes"):
+        if key not in manifest:
+            raise SubmissionRejected(f"submission.json is missing required key {key!r}")
+
+    name = manifest["name"]
+    if not isinstance(name, str) or not NAME_RE.match(name):
+        raise SubmissionRejected(f"'name' must match {NAME_RE.pattern!r}, got {name!r}")
+
+    label = manifest["label"]
+    if not isinstance(label, str) or not label.strip():
+        raise SubmissionRejected(f"'label' must be a non-empty string, got {label!r}")
+
+    generated_by = manifest.get("generated_by")
+    if generated_by is not None and not isinstance(generated_by, str):
+        raise SubmissionRejected(f"'generated_by' must be a string if given, got {generated_by!r}")
+
+    graph = manifest.get("graph", "square")
+    if graph not in ANCILLA_GRAPH_TYPES:
+        raise SubmissionRejected(
+            f"'graph' must be one of {sorted(ANCILLA_GRAPH_TYPES)} for the ancilla challenge, got {graph!r}"
+        )
+
+    if not isinstance(manifest["sizes"], str):
+        raise SubmissionRejected(f"'sizes' must be a string, got {manifest['sizes']!r}")
+    sizes = validate_mixed_sizes(manifest["sizes"]) if graph == "square" else validate_shapes(manifest["sizes"])
+
+    return {**manifest, "sizes": sizes, "graph": graph}
+
+
+def check_ancilla_at_size(encode_fn, represent_fn, order_fn, lx: int, ly: int | None = None, graph: str = "square") -> tuple[int, int, int]:
+    """(n_ancillas, max_weight, total_weight) at shape lx * ly for the
+    ancilla challenge. Raises SubmissionRejected if verification fails OR
+    if max_weight exceeds ANCILLA_MAX_WEIGHT -- a submission must back its
+    claim (max_weight <= 3) at every size it claims, exactly like the
+    ancilla-free challenges' own check_at_size never silently accepts a
+    partial pass.
+    """
+    from harness.graphs import build_spec as build_graph_spec
+    from harness.v2.evaluate import evaluate_extended
+    from harness.v2.hamiltonian_terms import hamiltonian_terms
+
+    if ly is None:
+        ly = lx
+    spec = build_spec(lx, ly, order_fn) if graph == "square" else build_graph_spec(graph, lx, ly, order_fn)
+    terms = hamiltonian_terms(spec, model="full")
+    result = evaluate_extended(spec, encode_fn, terms, represent_fn)
+    if not result["passed"]:
+        raise SubmissionRejected(f"FAILED at {lx}x{ly}: {summarize_ancilla_failure(result)}")
+    if result["max_weight"] > ANCILLA_MAX_WEIGHT:
+        raise SubmissionRejected(
+            f"FAILED at {lx}x{ly}: max_weight {result['max_weight']} exceeds the "
+            f"ancilla challenge's fixed cap of {ANCILLA_MAX_WEIGHT}"
+        )
+    return result["n_ancillas"], result["max_weight"], result["total_weight"]
+
+
+def summarize_ancilla_failure(result: dict) -> str:
+    """summarize_failure()'s analogue for an evaluate_extended() result --
+    also has to handle the stabilizer checks (2-4) evaluate_extended adds,
+    which summarize_failure's legacy-only check dict doesn't know about.
+    """
+    if "error" in result:
+        return result["error"]
+    checks = result["checks"]
+    for name in ("well_formed", "majorana_algebra", "stabilizers_well_formed", "stabilizers_abelian", "stabilizers_compatible", "codespace_dimension"):
+        check = checks.get(name)
+        if check is not None and not check["passed"]:
+            if name == "majorana_algebra":
+                examples = ", ".join(str(v) for v in check["violations"][:5])
+                more = f" (+{check['n_violations'] - 5} more)" if check["n_violations"] > 5 else ""
+                return f"{check['n_violations']} Majorana pairs fail to anticommute, e.g. {examples}{more}"
+            if name == "well_formed":
+                return "malformed mapping: " + "; ".join(check["issues"])
+            if name == "stabilizers_well_formed":
+                return "malformed stabilizers: " + "; ".join(check["issues"])
+            return f"check {name!r} failed: {check}"
+    return "unknown failure"
 
 
 def load_score_cache() -> dict:

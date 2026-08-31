@@ -623,3 +623,131 @@ an all-integer `sizes` string parses identically to before
 (`validate_mixed_sizes("3-15") == validate_sizes("3-15")`, tested
 directly), so registry.json's pre-existing plain-int entries, and their
 score-cache hits, are completely unaffected.
+
+## The ancilla/stabilizer challenge (LEADERBOARD_ANCILLAS.md)
+
+Built on top of the `harness/v2` extension (stabilizer verification,
+certified stabilizer-dressed scoring -- see the git history for the
+extension's own phased build-out; CLAUDE.md's "The ancilla/stabilizer
+challenge" section has the durable rules). This section covers the
+design decisions specific to turning that harness extension into an
+actual player-facing challenge with its own leaderboard.
+
+**The challenge is deliberately the opposite framing from Challenge A/B in
+the original extension-planning doc** (which proposed "minimize ancillas
+at fixed weight" as one of *two* possible challenges, the other being
+"minimize weight at a fixed ancilla budget" -- see
+`harness/v2/challenges.py`, which still implements both generically). Only
+the first is actually surfaced as a real challenge with a leaderboard: fix
+`max_weight <= 3` (the smallest weight Derby-Klassen's own paper achieves,
+and a natural, meaningful target rather than an arbitrary number), minimize
+`n_ancillas`. `scripts/run_challenge.py`'s `weights` subcommand and
+`run_min_weight_challenge()` still exist and work, just aren't wired into
+any leaderboard yet -- a natural extension if a second track is wanted
+later.
+
+**Sizes: each lattice type reuses its own existing challenge's range**,
+not a new number invented for this challenge -- square sweeps `3x3..15x15`
+(`LEADERBOARD.md`'s own `SIZES`), hexagonal (once it has a working
+reference -- see below) would sweep `3x3..8x8`
+(`GRAPH_SWEEP_SIZES["hexagonal"]` from the graph challenge). Simpler to
+state and justify than inventing a third number, and consistent with how
+this repo has always picked sweep ranges (see the graph challenge's own
+"both capped at 8x8" reasoning in CLAUDE.md).
+
+### Derby-Klassen, square lattice: reconstructed from the actual paper
+
+`harness/v2/baselines/dk.py` was built by fetching and reading arXiv
+2003.06939's PDF directly (including Figures 1-3), not from memory or a
+lossy text extraction -- per CLAUDE.md's rule against reconstructing a
+paper's construction from prose alone when the primary source is
+checkable. The module's own docstring has the full breakdown of what's
+paper-sourced (Eq. 7-9, the checkerboard face coloring, the corner-Majorana
+rule, Table I's weight claims) versus this implementation's own completion
+(the concrete row/column-uniform edge-orientation rule, and the L-shaped
+spanning path used to build one global Majorana per vertex from the
+paper's edge operators). Empirically verified against the harness itself
+at every tested "case I" size (Supplementary Material's term for when the
+full `M`-mode Fock space is represented, not a restricted or extended
+one -- requires `Lx`, `Ly` not both even): `verify_extended` passes,
+qubit count stays under the paper's claimed `1.5x`-per-mode bound
+(reaching `1.44x` at `15x15`), and `represent()` reproduces Table I's
+*exact* claimed weights (`max_rehop=3`, `max_imhop=3`, `max_num=1`,
+`max_int=2`) via closed-form identities derived from the paper's own
+relations (`gammabar_j = i*gamma_j*Z_j`, itself following from
+`V_j := -i*gamma_j*gammabar_j = Z_j`), not search. Both-even sizes are
+rejected with a clear, documented error rather than silently
+misrepresenting a different Hilbert space as the full one.
+
+Registered at exactly the odd sizes it can actually claim (`3,5,7,9,11,
+13,15` -- every even `L` gives `Lx=Ly=L` both even, hence case II/III),
+so `LEADERBOARD_ANCILLAS.md`'s square table has real gaps at even columns
+until some other submission fills them in -- same "a size-scoped
+submission just doesn't appear for sizes it doesn't claim" handling
+`render_ranked_table` already has everywhere else.
+
+### Hexagonal Derby-Klassen: investigated and not yet solved
+
+Attempted a `harness/v2/baselines/dk_hexagonal.py` analogous to the square
+one, using the paper's own Supplementary Material section ("HEXAGONAL
+LATTICE MAPPING", read directly from the PDF including its Figure 2): a
+qubit at *every* face (no even/odd split -- "there are no trivial cycles"
+for hexagons, unlike the square lattice), edges oriented "clockwise on
+even columns of faces, counterclockwise on odd", with the bottom edge of
+each hexagon carrying a `Y_f` face factor and its two cycle-neighbours
+carrying `X_f`.
+
+Derived the face structure combinatorially from `harness.graphs.hex_lattice`'s
+own stated bond directions (confirmed correct: the hexagonal face anchored
+at unit cell `(x, y)` is the 6-cycle `A(x,y)-B(x,y)-A(x,y+1)-B(x-1,y+1)-
+A(x-1,y+1)-B(x-1,y)`, verified edge-by-edge), and built an explicit pixel
+embedding (`A(x,y)` at `(2x, y)`, `B(x,y)` at `(2x+1, y)`) to determine
+genuine clockwise/counterclockwise via the shoelace formula, rather than
+guessing.
+
+**The actual obstacle**: for the square lattice, only one of the two faces
+neighbouring any given edge is ever "even" (the checkerboard-odd one
+contributes nothing), so only one face's orientation choice ever actually
+mattered for that edge -- the delicate part of that construction (see
+`harness/v2/baselines/dk.py`'s own docstring) never had to reconcile two
+independent votes. Hexagonal gives *every* face a real stabilizer, so
+*both* neighbours of a shared edge "vote" on its orientation via their own
+column-parity rule. Two faces sharing an edge, each genuinely tracing its
+own boundary clockwise, always induce *opposite* raw directions on that
+edge (confirmed via the pixel embedding) -- for two *vertically-stacked*
+faces (same column, hence the *same* clockwise/counterclockwise choice
+under the paper's own column-based rule), reversing both of two already-
+opposite votes by the same amount never reconciles them. Confirmed
+empirically: `verify_extended` reported a genuine, unconditional edge
+orientation conflict (`face(1,0)`'s and `face(1,1)`'s independent
+assignments of the shared edge `A(1,1)-B(0,1)` always disagreed,
+regardless of which column-parity convention was tried).
+
+A simplified fallback (orient every edge uniformly from its `A`-endpoint
+to its `B`-endpoint, sidestepping the whole column-parity question) is
+*not* a valid substitute, and this is the more important finding: unlike
+the square lattice, where the algebra backbone construction is somewhat
+forgiving (any fixed, self-consistent choice works, since the delicate
+part is entirely in the stabilizers), orientation for hexagonal directly
+determines whether the *Majorana anticommutation algebra itself* holds --
+the naive uniform rule produced 336 check-1 violations at `3x3`. At every
+degree-3 vertex, by pigeonhole, at least two of its three incident edges
+must share the same tail/head role there; for those two to still
+anticommute (Eq. 4-5's requirement), the face-qubit factors have to pick
+up the slack -- exactly the kind of three-way vertex/edge/face interaction
+the paper's careful column-alternating rule is presumably designed to get
+right, and which isn't a free choice the way it looked for the square
+lattice.
+
+**What would actually resolve this**: either recovering the paper's true
+geometric intent for "column" in a way that reconciles vertically-stacked
+faces (most likely: the correspondence between `harness.graphs.hex_lattice`'s
+`(x, y, sublattice)` labels and the paper's own drawn geometry isn't the
+one assumed here), or a genuine per-vertex constraint-satisfaction
+derivation of edge roles from Eq. 4-5 directly, rather than trying to
+reverse-engineer "clockwise on even columns" as a shortcut to it. Given
+the depth of the obstacle, this was deliberately not pursued further for
+now -- see CLAUDE.md's own pointer for what adding it later would involve
+(a new baseline module, registered the same way, plus a hexagonal
+table/chart in `scripts/update_leaderboard_ancillas.py` -- no
+rearchitecture needed once the construction itself is right).

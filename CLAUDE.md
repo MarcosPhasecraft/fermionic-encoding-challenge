@@ -190,6 +190,86 @@ hexagonal's `M = 2·Lx·Ly`. Leaving `order()` undeclared lets
 canonical default, which is what "the canonical ordering, whatever is
 most natural for the lattice" means here.
 
+## The ancilla/stabilizer challenge
+
+A third challenge (`LEADERBOARD_ANCILLAS.md`), structurally different from
+the two above: submissions here are *expected* to use ancilla qubits
+(`n_qubits > M`) and a real, non-empty stabilizer group. Full player-facing
+explanation in `README.md`'s own section; `inbox/README.md`'s own section
+has the exact submission mechanics. This section is the durable rules an
+agent working on the harness/pipeline itself needs to know.
+
+**Detection is a single manifest field, nothing else.**
+`submission.json`'s `"challenge": "ancillas"` — its presence routes a
+submission through an entirely separate pipeline
+(`scripts/process_inbox.py`'s `_process_one_ancilla`,
+`scripts/submission_lib.py`'s `validate_ancilla_manifest`/
+`check_ancilla_at_size`); its absence (the default) means the exact
+existing ancilla-free handling, completely untouched. Never infer "this is
+an ancilla submission" from the shape of what `encode()` returns (e.g.
+`n_qubits > M`) — the field is the single source of truth, checked before
+any code from the submission ever runs.
+
+**Everything here lives in `harness/v2/`, not `harness/`.** The ancilla
+challenge is built on `harness/v2/verify.py`/`score.py`/`evaluate.py`/
+`hamiltonian_terms.py`/`challenges.py` — a full stabilizer-aware verifier
+and scorer, deliberately never merged into `harness/verify.py`/`score.py`
+proper. Reason: `scripts/submission_lib.py`'s `harness_fingerprint()`
+hashes every `harness/*.py` file (non-recursively) to gate the *entire*
+ancilla-free score cache at once — putting stabilizer-checking code there
+would invalidate every historical ancilla-free submission's cached score
+the moment this challenge's code changed, for zero actual behavior change
+to any of them. `harness/v2/` has its own, separate
+`harness_v2_fingerprint()` (same non-recursive-glob trick, applied to
+`harness/v2/*.py`) gating its own `.leaderboard_cache_ancillas.json`.
+`harness/v2/baselines/` is this challenge's own `baselines/`-equivalent —
+individually-hashed accepted submissions, invisible to
+`harness_v2_fingerprint()` for the same reason `baselines/*.py` is
+invisible to `harness_fingerprint()`.
+
+**Check 3 (stabilizer/Majorana compatibility) uses the *strong* condition**
+— every stabilizer must commute with every individual Majorana — not
+PLAN.md §1.5's weaker "constant signature" condition (which is provably
+sufficient for this harness's own scoring, since every scored Hamiltonian
+term is an even-degree Majorana product, but is a deliberately stricter
+choice here; see `harness/v2/verify.py`'s own docstring for the proof of
+why the weaker condition would also work, and why the stronger one was
+chosen anyway).
+
+**`represent()` is certified, never trusted.** A submission's optional
+`represent(term, raw_pauli, spec, mapping) -> str` hook proposes a
+lower-weight, stabilizer-equivalent representative for one Hamiltonian
+term; `harness/v2/score.py` verifies the proposal differs from the raw
+Majorana product by an actual element of the stabilizer group (`GF(2)`
+row-span membership) before trusting its weight. An uncertified proposal
+fails the whole submission — never silently falls back to the raw weight,
+which would let a wrong `represent()` under-report weight undetected.
+
+**Max Pauli weight is fixed at 3 by the challenge itself** —
+`ANCILLA_MAX_WEIGHT` in `scripts/submission_lib.py` — not a
+submission-configurable field. A submission's job is to minimize
+`n_ancillas` subject to that fixed cap, checked at every size claimed
+exactly like every other pass/fail criterion in this repo (no partial
+credit for a size that exceeds it).
+
+**Square and hexagonal only** — not triangular, not the periodic variants.
+`ANCILLA_GRAPH_TYPES` in `scripts/submission_lib.py` is the single place
+this is enforced. Hexagonal is a fully valid, verified, scored, and cached
+submission target already; it simply has no rendered leaderboard table yet
+because there's no working hexagonal Derby-Klassen reference construction
+(see NOTES.md for the specific geometric/algebraic obstacle hit while
+attempting one, and what would need solving to add it) — adding one later
+means writing `harness/v2/baselines/dk_hexagonal.py`, registering it via
+`scripts/submit_ancilla_baseline.py --graph hexagonal`, and adding a
+`GRAPH_SWEEP_SIZES`-style hexagonal table/chart to
+`scripts/update_leaderboard_ancillas.py` — not a rearchitecture.
+
+**`baselines/registry.json` and `harness/v2/baselines/registry.json` are
+fully independent namespaces.** The same `name` can exist in both without
+conflict — `scripts/process_inbox.py` only checks the registry belonging
+to whichever pipeline a submission's `"challenge"` field routes it
+through.
+
 ## Conventions
 
 - Python, `numpy` for the harness. `pytest` for tests. `openfermion` is a

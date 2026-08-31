@@ -78,10 +78,12 @@ from harness.graphs import build_spec as build_graph_spec  # noqa: E402
 from scripts.submission_lib import (  # noqa: E402
     REPO_ROOT,
     SubmissionRejected,
+    check_ancilla_at_size,
     check_at_size,
     load_registry,
     registry_entry,
     save_registry,
+    validate_ancilla_manifest,
     validate_encode_source,
     validate_manifest,
 )
@@ -90,6 +92,7 @@ from scripts.submission_lib import (  # noqa: E402
 # submission_lib.BASELINES_DIR and have this script's writes follow it.
 
 from harness.loading import load_submission
+from harness.v2.loading import load_submission_extended
 
 INBOX = REPO_ROOT / "inbox"
 PROCESSED = INBOX / "_processed"
@@ -129,17 +132,41 @@ def _files_touched(accepted: list[dict], skip_leaderboard: bool) -> list[str]:
     none of the "none"-answer end-to-end tests ever exercise the git path
     at all (and a memory folder missing from this list would silently
     stay untracked forever even after answering "commit").
+
+    accepted mixes ancilla-challenge and ancilla-free acceptances in one
+    run (each dict tagged r.get("challenge") == "ancillas" or absent) --
+    each category's own registry/leaderboard files are only listed if that
+    category actually had an acceptance this run, so a run that only
+    touched one pipeline doesn't `git add` the other's untouched files.
     """
-    touched = ["baselines/registry.json"]
-    if not skip_leaderboard:
-        touched += [
-            "LEADERBOARD.md", "MEMORY.md", "assets/progress_total_weight.png",
-            "_leaderboard_body.md",
-        ]
-    for r in accepted:
-        touched.append(f"baselines/{r['name']}.py")
-        if r["has_memory"]:
-            touched.append(f"baselines/{r['name']}.memory")
+    weight_accepted = [r for r in accepted if r.get("challenge") != "ancillas"]
+    ancilla_accepted = [r for r in accepted if r.get("challenge") == "ancillas"]
+
+    touched = []
+    if weight_accepted:
+        touched.append("baselines/registry.json")
+        if not skip_leaderboard:
+            touched += [
+                "LEADERBOARD.md", "MEMORY.md", "assets/progress_total_weight.png",
+                "_leaderboard_body.md",
+            ]
+        for r in weight_accepted:
+            touched.append(f"baselines/{r['name']}.py")
+            if r["has_memory"]:
+                touched.append(f"baselines/{r['name']}.memory")
+
+    if ancilla_accepted:
+        touched.append("harness/v2/baselines/registry.json")
+        if not skip_leaderboard:
+            touched += [
+                "LEADERBOARD_ANCILLAS.md", "assets/progress_ancillas_square.png",
+                "_ancilla_leaderboard_body.md",
+            ]
+        for r in ancilla_accepted:
+            touched.append(f"harness/v2/baselines/{r['name']}.py")
+            if r["has_memory"]:
+                touched.append(f"harness/v2/baselines/{r['name']}.memory")
+
     return touched
 
 
@@ -240,6 +267,79 @@ def _process_one(folder: Path, registry: dict) -> dict:
         return {"name": folder.name, "accepted": False, "reason": f"{type(e).__name__}: {e}"}
 
 
+def _process_one_ancilla(folder: Path, ancilla_registry: dict) -> dict:
+    """_process_one()'s analogue for a "challenge": "ancillas" submission
+    (see inbox/README.md) -- same shape and same never-raises contract, but
+    dispatches through harness.v2 (load_submission_extended,
+    check_ancilla_at_size) instead of the ancilla-free pipeline, and writes
+    to harness/v2/baselines/registry.json, not baselines/registry.json.
+    encode.py may additionally define represent(term, raw_pauli, spec,
+    mapping) -- validate_encode_source's "no top-level name bound twice"
+    check already covers it as just another allowed top-level name.
+    """
+    try:
+        manifest_path = folder / "submission.json"
+        encode_path = folder / "encode.py"
+        if not manifest_path.is_file():
+            raise SubmissionRejected("missing submission.json")
+        if not encode_path.is_file():
+            raise SubmissionRejected("missing encode.py")
+
+        try:
+            raw_manifest = json.loads(manifest_path.read_text())
+        except json.JSONDecodeError as e:
+            raise SubmissionRejected(f"submission.json is not valid JSON: {e}")
+        manifest = validate_ancilla_manifest(raw_manifest)
+
+        name = manifest["name"]
+        if name in ancilla_registry:
+            raise SubmissionRejected(f"'{name}' is already registered -- choose a different name")
+
+        validate_encode_source(encode_path.read_text())
+
+        encode_fn, order_fn, represent_fn = load_submission_extended(str(encode_path))
+        graph = manifest["graph"]  # validate_ancilla_manifest already defaulted this to "square"
+
+        print(f"\ntesting {folder.name!r} ('{manifest['name']}') at sizes {manifest['sizes']} "
+              f"(challenge=ancillas, graph={graph!r}, max_weight<={submission_lib.ANCILLA_MAX_WEIGHT}) ...", flush=True)
+        scores = {}
+        for s in manifest["sizes"]:
+            lx, ly = (s, s) if isinstance(s, int) else s
+            n_ancillas, max_weight, total_weight = check_ancilla_at_size(encode_fn, represent_fn, order_fn, lx, ly, graph=graph)
+            key = s if isinstance(s, int) else f"{lx}x{ly}"
+            scores[key] = {"n_ancillas": n_ancillas, "max_weight": max_weight, "total_weight": total_weight}
+            print(f"  {lx}x{ly}: n_ancillas={n_ancillas} max_weight={max_weight}", flush=True)
+
+        dest = submission_lib.ANCILLA_BASELINES_DIR / f"{name}.py"
+        shutil.copy(encode_path, dest)
+
+        memory_dir = folder / "memory"
+        has_memory = memory_dir.is_dir()
+        if has_memory:
+            shutil.copytree(memory_dir, submission_lib.ANCILLA_BASELINES_DIR / f"{name}.memory")
+
+        now = datetime.now(timezone.utc)
+        submitted_at = now.isoformat(timespec="seconds")
+        ancilla_registry[name] = submission_lib.ancilla_registry_entry(
+            name, manifest["sizes"], manifest["label"], graph, represent_fn is not None,
+            generated_by=manifest.get("generated_by"), submitted_at=submitted_at,
+        )
+        submission_lib.save_ancilla_registry(ancilla_registry)
+
+        PROCESSED.mkdir(parents=True, exist_ok=True)
+        archived_name = f"{now.strftime('%Y%m%d-%H%M%S')}_{name}"
+        shutil.move(str(folder), str(PROCESSED / archived_name))
+
+        return {"name": name, "label": manifest["label"], "accepted": True, "challenge": "ancillas",
+                "scores": scores, "submitted_at": submitted_at,
+                "generated_by": manifest.get("generated_by"), "has_memory": has_memory}
+
+    except SubmissionRejected as e:
+        return {"name": folder.name, "accepted": False, "reason": str(e)}
+    except Exception as e:  # noqa: BLE001 -- one submission's bug must not kill the batch
+        return {"name": folder.name, "accepted": False, "reason": f"{type(e).__name__}: {e}"}
+
+
 def _print_summary(results: list[dict]) -> None:
     accepted = [r for r in results if r["accepted"]]
     rejected = [r for r in results if not r["accepted"]]
@@ -255,10 +355,32 @@ def _print_summary(results: list[dict]) -> None:
             print(f"  generated_by: {r['generated_by']}")
         for l, s in sorted(r["scores"].items(), key=lambda kv: str(kv[0])):
             size_label = f"{l}x{l}" if isinstance(l, int) else l  # square: bare int size; graph: already "LxxLy"
-            print(f"  {size_label}: total={s['total']} max={s['max']}")
+            if r.get("challenge") == "ancillas":
+                print(f"  {size_label}: n_ancillas={s['n_ancillas']} max_weight={s['max_weight']}")
+            else:
+                print(f"  {size_label}: total={s['total']} max={s['max']}")
 
     for r in rejected:
         print(f"\n[REJECTED] {r['name']!r}: {r['reason']}")
+
+
+def _dispatch(folder: Path, registry: dict, ancilla_registry: dict) -> dict:
+    """Peeks submission.json's "challenge" field (default "weight", the
+    ancilla-free challenges) to decide which pipeline processes this
+    folder -- before any real validation, so a malformed/missing manifest
+    still falls through to _process_one's own error reporting for that
+    case rather than failing here with a less specific message.
+    """
+    manifest_path = folder / "submission.json"
+    challenge = "weight"
+    if manifest_path.is_file():
+        try:
+            challenge = json.loads(manifest_path.read_text()).get("challenge", "weight")
+        except json.JSONDecodeError:
+            pass  # let _process_one's own JSON-parse error reporting handle it
+    if challenge == "ancillas":
+        return _process_one_ancilla(folder, ancilla_registry)
+    return _process_one(folder, registry)
 
 
 def main():
@@ -274,16 +396,24 @@ def main():
     print(f"{len(pending)} pending: {', '.join(p.name for p in pending)}")
 
     registry = load_registry()
-    results = [_process_one(folder, registry) for folder in pending]
+    ancilla_registry = submission_lib.load_ancilla_registry()
+    results = [_dispatch(folder, registry, ancilla_registry) for folder in pending]
     _print_summary(results)
 
     accepted = [r for r in results if r["accepted"]]
     if not accepted:
         return
 
-    if not args.skip_leaderboard:
+    weight_accepted = any(r.get("challenge") != "ancillas" for r in accepted)
+    ancilla_accepted = any(r.get("challenge") == "ancillas" for r in accepted)
+
+    if not args.skip_leaderboard and weight_accepted:
         print("\nRegenerating LEADERBOARD.md ...")
         subprocess.run([sys.executable, str(REPO_ROOT / "scripts" / "update_leaderboard.py")], check=True, cwd=REPO_ROOT)
+
+    if not args.skip_leaderboard and ancilla_accepted:
+        print("\nRegenerating LEADERBOARD_ANCILLAS.md ...")
+        subprocess.run([sys.executable, str(REPO_ROOT / "scripts" / "update_leaderboard_ancillas.py")], check=True, cwd=REPO_ROOT)
 
     if not args.skip_tests:
         print("\nRunning the test suite ...")
