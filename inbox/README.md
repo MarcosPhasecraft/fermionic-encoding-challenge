@@ -41,7 +41,7 @@ Graph challenge (non-square lattices -- note `sizes`' different grammar, and the
 {
   "name": "alice_tri_variant",
   "label": "Alice's Tri-Lattice Variant",
-  "sizes": "3x3,4x4,5x5,6x6,7x7,8x8,9x9,10x10,11x11,12x12,13x13,14x14,15x15",
+  "sizes": "3x3,4x4,5x5,6x6,7x7,8x8",
   "graph": "triangular",
   "generated_by": "Claude Opus 4.5"
 }
@@ -93,9 +93,10 @@ Graph challenge (non-square lattices -- note `sizes`' different grammar, and the
   `LEADERBOARD.md`, per graph type: a pair of rank-based tables (total
   weight, max weight), row 1 is whoever wins, not a fixed encoding,
   columns are `Lx = Ly` sizes exactly like `LEADERBOARD.md`'s own —
-  swept `3x3..15x15` for `triangular` and `3x3..10x10` for `hexagonal`
-  (hexagonal has two sites per unit cell, so its mode count grows twice
-  as fast for the same `L`, hence the shorter sweep). `periodic_hexagonal`/
+  swept `3x3..8x8` for both `triangular` and `hexagonal` (the same
+  numeric cap for both, deliberately, even though hexagonal has two sites
+  per unit cell and so reaches double triangular's qubit count at the
+  same `L` — 128 vs. 64 at `8x8`). `periodic_hexagonal`/
   `periodic_triangular` are valid `"graph"` values and get fully
   verified/scored/cached, but aren't swept/shown in a table yet. There's
   also a progress-over-time chart at the top, like `LEADERBOARD.md`'s,

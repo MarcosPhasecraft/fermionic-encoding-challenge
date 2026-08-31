@@ -305,8 +305,9 @@ def test_graph_paper_entries_max_is_always_empty():
 
 def test_graph_sweep_column_labels():
     assert update_leaderboard.graph_sweep_column_labels("hexagonal")[0] == "3×3"
-    assert len(update_leaderboard.graph_sweep_column_labels("triangular")) == 13
-    assert len(update_leaderboard.graph_sweep_column_labels("hexagonal")) == 8
+    assert update_leaderboard.graph_sweep_column_labels("triangular")[-1] == "8×8"
+    assert len(update_leaderboard.graph_sweep_column_labels("triangular")) == 6
+    assert len(update_leaderboard.graph_sweep_column_labels("hexagonal")) == 6
 
 
 # --- graph_other_shapes / render_other_graph_shapes ---
@@ -454,13 +455,13 @@ def test_is_showcased_square_out_of_range_not_showcased():
 
 
 def test_is_showcased_triangular_in_sweep():
+    assert update_leaderboard.is_showcased("triangular", 3, 3) is True
     assert update_leaderboard.is_showcased("triangular", 8, 8) is True
-    assert update_leaderboard.is_showcased("triangular", 15, 15) is True
 
 
 def test_is_showcased_hexagonal_in_sweep():
+    assert update_leaderboard.is_showcased("hexagonal", 3, 3) is True
     assert update_leaderboard.is_showcased("hexagonal", 8, 8) is True
-    assert update_leaderboard.is_showcased("hexagonal", 10, 10) is True
 
 
 def test_is_showcased_hexagonal_canonical_shape_not_showcased():
@@ -470,11 +471,11 @@ def test_is_showcased_hexagonal_canonical_shape_not_showcased():
 
 
 def test_is_showcased_triangular_out_of_sweep_range_not_showcased():
-    assert update_leaderboard.is_showcased("triangular", 16, 16) is False
+    assert update_leaderboard.is_showcased("triangular", 9, 9) is False
 
 
 def test_is_showcased_hexagonal_out_of_sweep_range_not_showcased():
-    assert update_leaderboard.is_showcased("hexagonal", 11, 11) is False
+    assert update_leaderboard.is_showcased("hexagonal", 9, 9) is False
 
 
 def test_is_showcased_periodic_types_never_showcased():

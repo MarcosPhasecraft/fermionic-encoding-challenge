@@ -139,10 +139,12 @@ cached — whether or not it ever appears in a rendered table.** What's
 in `scripts/update_leaderboard.py`: for `"square"`, an exact `Lx == Ly`
 within `SIZES` (3x3..15x15, arXiv 2504.21636 Table I's own sweep); for
 `"triangular"`/`"hexagonal"`, an exact `Lx == Ly` within that graph
-type's own `GRAPH_SWEEP_SIZES` entry (triangular 3..15, hexagonal 3..10 —
-hexagonal has two sites per unit cell, so its mode count `M = 2·Lx·Ly`
-grows twice as fast as triangular's `M = Lx·Ly`, hence the shorter sweep,
-chosen so hexagonal's top qubit count lands near triangular's); for
+type's own `GRAPH_SWEEP_SIZES` entry (both `3..8`, the same numeric cap
+for both — deliberately, not a per-type qubit-count-matched one: hexagonal
+has two sites per unit cell, so its mode count `M = 2·Lx·Ly` grows twice
+as fast as triangular's `M = Lx·Ly`, meaning hexagonal's top qubit count
+at `8x8` (128) ends up double triangular's (64), accepted for how much
+simpler "both sweep 3x3..8x8" is to state than two different caps); for
 `"periodic_hexagonal"`/`"periodic_triangular"`, always `False` — no sweep
 defined for them yet. A submission at any non-showcased shape/size (an
 off-square rectangle, an out-of-range size, or any periodic-type shape)

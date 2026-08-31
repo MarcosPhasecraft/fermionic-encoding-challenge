@@ -93,21 +93,23 @@ SIZES = list(range(3, 16))
 
 
 # Range of Lx=Ly sizes shown in each graph type's own sweep table/chart --
-# mirrors SIZES, but per graph type, since hexagonal's mode count
-# (M = 2*Lx*Ly, two sites per unit cell) grows twice as fast as
-# triangular's (M = Lx*Ly, same as the square lattice). A shared upper
-# bound would leave hexagonal's top qubit count roughly double
-# triangular's; capped instead so the two land in the same ballpark
-# (hexagonal 10x10 = 200 qubits, triangular 15x15 = 225) -- a submission's
-# own encode() may do real optimization work, so the qubit count a
-# verifier run actually has to handle matters, not just what our own
-# reference baselines need. periodic_hexagonal/periodic_triangular have
-# no sweep defined -- not shown in any table yet (still submittable,
-# still scored and cached, same as any other is_showcased()-excluded
-# shape -- see NOTES.md).
+# both capped at 8x8, deliberately smaller than SIZES' own 3x3..15x15
+# (arXiv 2504.21636 Table I's square-lattice sweep): a submission's own
+# encode() may do real optimization work, and 8x8 keeps the largest case
+# in either sweep comfortably fast to verify/score regardless of what a
+# submission does, without needing to reason about it case by case.
+# Deliberately the SAME numeric cap for both graph types, not a per-type
+# qubit-count-matched one: hexagonal's mode count (M = 2*Lx*Ly, two sites
+# per unit cell) grows twice as fast as triangular's (M = Lx*Ly, same as
+# the square lattice), so hexagonal's top qubit count at 8x8 (128) ends up
+# double triangular's (64) -- accepted for how much simpler "both sweep
+# 3x3..8x8" is to state and explain than two different numbers would be.
+# periodic_hexagonal/periodic_triangular have no sweep defined -- not
+# shown in any table yet (still submittable, still scored and cached,
+# same as any other is_showcased()-excluded shape -- see NOTES.md).
 GRAPH_SWEEP_SIZES = {
-    "triangular": list(range(3, 16)),
-    "hexagonal": list(range(3, 11)),
+    "triangular": list(range(3, 9)),
+    "hexagonal": list(range(3, 9)),
 }
 
 
@@ -894,22 +896,22 @@ def write_graph_challenge_leaderboard():
             "challenge. Same layout as `LEADERBOARD.md` too: rows are rank "
             "positions, not fixed encodings, and columns are lattice sizes "
             "`Lx = Ly` (a submission may claim other shapes too -- see "
-            "\"Other shapes\" below) -- swept 3x3..15x15 for Tri-Lattice and "
-            "3x3..10x10 for Hex-Lattice (`GRAPH_SWEEP_SIZES` in "
-            "`scripts/update_leaderboard.py`; Hex-Lattice has two sites per unit "
-            "cell, so its mode count grows twice as fast, hence the shorter sweep "
-            "-- 10x10 there is 200 qubits, about the same as Tri-Lattice's 15x15 "
-            "at 225). Periodic Hex-Lattice and Periodic Tri-Lattice are valid "
-            "targets too (`\"graph\": \"periodic_hexagonal\"/\"periodic_triangular\"` "
-            "in `submission.json`) but aren't swept/shown in a table yet -- any "
-            "shape claimed for them is still verified, scored, and cached, and "
-            "shows up in \"Other shapes\" below. Same non-negotiable rule as the "
+            "\"Other shapes\" below) -- swept `3x3..8x8` for both Tri-Lattice and "
+            "Hex-Lattice (`GRAPH_SWEEP_SIZES` in `scripts/update_leaderboard.py`; "
+            "the same numeric cap for both, deliberately, even though Hex-Lattice "
+            "has two sites per unit cell and so reaches double the qubit count of "
+            "Tri-Lattice at the same `L` -- 128 vs. 64 at `8x8`). Periodic "
+            "Hex-Lattice and Periodic Tri-Lattice are valid targets too "
+            "(`\"graph\": \"periodic_hexagonal\"/\"periodic_triangular\"` in "
+            "`submission.json`) but aren't swept/shown in a table yet -- any shape "
+            "claimed for them is still verified, scored, and cached, and shows up "
+            "in \"Other shapes\" below. Same non-negotiable rule as the "
             "square-lattice challenge: the harness does not search orderings on a "
             "submission's behalf; each graph type ships one canonical default "
             "ordering (see `harness/graphs.py`), overridable by a submission's own "
             "declared `order(Lx, Ly) -> perm` exactly as today.\n\n"
             "A submission declares which shape(s) it targets as explicit `Lx x Ly` "
-            "pairs (e.g. `\"sizes\": \"8x8,15x15\"` in `submission.json` -- see "
+            "pairs (e.g. `\"sizes\": \"3x3,8x8\"` in `submission.json` -- see "
             "`inbox/README.md`), not a single size: for these lattice types, mode "
             "count `M` alone does **not** determine the graph -- different `(Lx, "
             "Ly)` splits at the same `M` are structurally different graphs. `[1]` "

@@ -530,11 +530,12 @@ type (not a single canonical-shape column) was wanted, matching
 `LEADERBOARD.md` far more closely.
 
 **Current layout: one pair of ranked tables (total, max) per swept graph
-type** (Tri-Lattice 3x3..15x15, Hex-Lattice 3x3..10x10 --
-`GRAPH_SWEEP_SIZES` in `scripts/update_leaderboard.py`; hexagonal has two
-sites per unit cell so its mode count grows twice as fast, hence the
-shorter sweep, chosen so hexagonal's top qubit count, 200, lands near
-triangular's, 225), columns = that type's own `Lx = Ly` sizes, built via
+type** (Tri-Lattice 3x3..8x8, Hex-Lattice 3x3..8x8 --
+`GRAPH_SWEEP_SIZES` in `scripts/update_leaderboard.py`; both capped at the
+same numeric value, deliberately, not a qubit-count-matched one -- see
+"Sweep range capped at 8x8" below for why -- so hexagonal's top qubit
+count, 128 (`M = 2*Lx*Ly`, two sites per unit cell), ends up double
+triangular's, 64), columns = that type's own `Lx = Ly` sizes, built via
 `graph_sweep_entries`/`graph_paper_entries`/`graph_sweep_column_labels`
 feeding the same `render_ranked_table` the square-lattice challenge uses.
 Periodic Hex-Lattice/Periodic Tri-Lattice have no sweep defined -- not
@@ -566,6 +567,25 @@ to each lattice type's own canonical default when none is declared,
 which is `jw.py`/`ternary.py`'s own square-specific `order()` would in
 fact be the *wrong length* for hexagonal (`M = 2*Lx*Ly`, not `Lx*Ly`) if
 imported directly -- see `baselines/jw_hexagonal.py`'s docstring.
+
+**Sweep range capped at 8x8 (both types), superseding an earlier
+15x15/10x10 split.** The sweep initially went to Tri-Lattice 3x3..15x15,
+Hex-Lattice 3x3..10x10 -- chosen to keep top qubit counts "roughly
+comparable" (225 vs. 200) given hexagonal's `M = 2*Lx*Ly` grows twice as
+fast as triangular's `M = Lx*Ly`. Revisited because, unlike the
+square-lattice sweep (whose top size, 15x15/225 qubits, only ever runs
+against the harness's own fixed baselines), a graph-challenge submission's
+`encode()` can do real optimization work of unknown cost -- nothing bounds
+how expensive verifying the largest swept shape gets. Capped both types
+down to a uniform 3x3..8x8 instead: deliberately the *same* numeric cap,
+not a re-balanced qubit-count-matched pair (that would just reproduce the
+same problem at smaller numbers) -- accepted the resulting asymmetry
+(Hex-Lattice reaches 128 qubits at `8x8`, double Tri-Lattice's 64) for how
+much simpler "both sweep 3x3..8x8" is to state and explain than two
+different numbers. `CANONICAL_SHAPE` (the paper-comparison point gating
+`[1]` rows) is untouched by this -- still `(8, 4)` for hexagonal/
+periodic_hexagonal and `(8, 8)` for triangular/periodic_triangular, and
+still the only shape gated against Table II.
 
 Two real bugs found and fixed while building this (both by actually
 rendering the chart and looking at the PNG, not just eyeballing the
