@@ -622,6 +622,16 @@ def render_ranked_table(f, title, formula, entries, column_labels=None):
 
     max_rows = max((len(c) for c in columns), default=0)
 
+    if max_rows == 0:
+        # A header/separator row with no body row isn't reliably
+        # recognized as a table by every markdown renderer -- GitHub
+        # Pages' kramdown, in particular, falls back to showing the raw
+        # "| rank | ... |" text as a literal paragraph instead of a table
+        # (confirmed against the live site). Nothing to rank yet, so skip
+        # the table structure entirely rather than emit broken markup.
+        f.write("Nothing here yet.\n\n")
+        return
+
     header = " | ".join(column_labels)
     f.write(f"| rank | {header} |\n")
     f.write("|---" * (len(column_labels) + 1) + "|\n")

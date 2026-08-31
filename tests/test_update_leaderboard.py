@@ -386,11 +386,17 @@ def test_render_ranked_table_with_custom_column_labels():
     assert "**10**" in content and "**20**" in content
 
 
-def test_render_ranked_table_empty_entries_renders_header_only():
+def test_render_ranked_table_empty_entries_shows_nothing_here_yet():
+    # Not a header-only table: a markdown table with a header/separator
+    # but zero body rows isn't reliably recognized as a table by every
+    # renderer (confirmed against GitHub Pages' kramdown, which fell back
+    # to showing the raw "| rank | ... |" text as a literal paragraph).
     import io
     f = io.StringIO()
     update_leaderboard.render_ranked_table(f, "Title", "formula", [], column_labels=["Foo"])
-    assert "| rank | Foo |" in f.getvalue()
+    content = f.getvalue()
+    assert "Nothing here yet" in content
+    assert "| rank |" not in content
 
 
 # --- is_showcased ---

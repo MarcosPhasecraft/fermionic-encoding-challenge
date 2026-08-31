@@ -15,8 +15,7 @@ Best total Pauli weight reached so far on the Hex-Lattice at its canonical shape
 
 `D = max(Num, ReHop, ImHop, Inter)`
 
-| rank | Hex-Lattice (8x4) | Tri-Lattice (8x8) | Periodic Hex-Lattice (8x4) | Periodic Tri-Lattice (8x8) |
-|---|---|---|---|---|
+Nothing here yet.
 
 ## References
 
