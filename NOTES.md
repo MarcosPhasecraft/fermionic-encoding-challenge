@@ -509,15 +509,37 @@ exactly one `(Lx, Ly)` pinned as `CANONICAL_SHAPE` in `harness/graphs.py`
 `periodic_triangular`: `(8, 8)` -- chosen only to hit `M=64` exactly, not
 verified to match the paper's own undisclosed split -- these values
 carried over unchanged from the Table III design, since they were never
-about matching a specific paper table, just about hitting M=64); (3)
-`render_graph_challenge_table` in `scripts/update_leaderboard.py` only
-shows a submission's score next to the paper's `[1]` rows when its shape
-is an *exact* match to `CANONICAL_SHAPE` (a "vs. Table II" section) --
-any other shape a submission claims still scores and appears, just in a
-separate "Other shapes" section, not lined up against the paper. The same
-`is_showcased()` rule also now governs the square-lattice challenge's own
-table (see below), so both challenges share one mechanism for "scored and
-cached always, shown only if showcased."
+about matching a specific paper table, just about hitting M=64); (3) a
+submission's score only shows up next to the paper's `[1]` rows when its
+shape is an *exact* match to `CANONICAL_SHAPE` -- any other shape a
+submission claims still scores and appears, just in a separate "Other
+shapes" table, not lined up against the paper. The same `is_showcased()`
+rule also now governs the square-lattice challenge's own table (see
+below), so both challenges share one mechanism for "scored and cached
+always, shown only if showcased."
+
+**Later redesign (still the current layout):** `LEADERBOARD_GRAPHS.md`
+originally rendered one small table per graph type (four separate
+sections, each with its own "vs. Table II"/"Other shapes" sub-tables).
+Consolidated into the same shape as `LEADERBOARD.md` itself: one pair of
+rank-based tables (total, max) with the four lattice types as *columns*
+(`graph_ranked_entries`/`graph_paper_entries`/`graph_column_labels` in
+`scripts/update_leaderboard.py`, feeding the same `render_ranked_table`
+the square-lattice challenge uses, generalized to take `column_labels`),
+plus one shared "Other shapes" table (`graph_other_shapes`) instead of
+four. Also added a progress-over-time chart (`write_graph_progress_chart`,
+`assets/progress_hexagonal_weight.png`) mirroring `LEADERBOARD.md`'s own
+-- Hex-Lattice only, since its reference numbers are the largest of the
+four and give the clearest y-axis. With zero graph-challenge submissions
+registered, that chart's "record" line is empty; `render_progress_chart`
+(`scripts/progress_chart.py`) needed a real fix for this, not just an
+edge case to shrug off: matplotlib's date-axis autoscale with literally no
+points on it produced a nonsensical, backwards-reading tick range (found
+by actually rendering and looking at the PNG, not just eyeballing the
+code) -- fixed by skipping the date-locator/formatter entirely and
+showing a plain "No submissions yet" placeholder axis when `points` is
+empty, leaving the two reference lines (which still draw regardless of
+`points`) as the only real content until a submission lands.
 
 ## Rectangular submissions for the square-lattice challenge
 

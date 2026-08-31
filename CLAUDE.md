@@ -145,11 +145,16 @@ the graph types: gating on `M` alone would let a submission pick whichever
 aspect ratio is easiest to encode well while still nominally "matching"
 the paper at the same mode count. A submission at any other shape/size
 still gets scored and cached, and (on the graph-challenge side) shown in
-the table's separate "Other shapes" section — just never lined up against
-`[1]`, and (on the square-lattice side) not shown anywhere yet. This is
-the single place to touch when showcasing a new shape later (a wider
-square range, a second canonical hex shape, a new graph type) — not a
-rendering rewrite.
+a separate "Other shapes" table below the ranked ones — just never lined
+up against `[1]`, and (on the square-lattice side) not shown anywhere
+yet. This is the single place to touch when showcasing a new shape later
+(a wider square range, a second canonical hex shape, a new graph type) —
+not a rendering rewrite.
+
+`LEADERBOARD_GRAPHS.md` mirrors `LEADERBOARD.md`'s own layout (rank-based
+rows, `render_ranked_table`), just with columns = the four lattice types
+(at each one's `CANONICAL_SHAPE`) instead of columns = lattice sizes —
+one shared function, not a second table-rendering implementation.
 
 ## Conventions
 

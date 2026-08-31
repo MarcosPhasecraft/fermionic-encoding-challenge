@@ -85,6 +85,7 @@ from scripts.submission_lib import (
 )
 
 from baselines import BASELINES
+from baselines.jw import encode as jw_encode
 from harness.evaluate import evaluate
 from harness.graphs import CANONICAL_SHAPE, build_spec as build_graph_spec
 from harness.lattice import build_spec, hamiltonian
@@ -242,7 +243,7 @@ def scored_with_cache_graph(name, encode_fn, order_fn, graph, sizes, file_fp, ca
     list of (lx, ly) pairs -- unlike the square-lattice challenge, mode
     count alone doesn't pin down the graph here (see harness.graphs.CANONICAL_SHAPE),
     so every shape a submission claims is scored and cached independently;
-    render_graph_challenge_table decides which of them is_showcased().
+    graph_ranked_entries/graph_other_shapes decide which of them is_showcased().
     Deliberately separate from scored_with_cache rather than a shared
     abstraction: that one is keyed by SIZES.index(l) (a fixed 3..15 column
     position, specific to the square-lattice table's layout), which doesn't
@@ -271,14 +272,28 @@ def scored_with_cache_graph(name, encode_fn, order_fn, graph, sizes, file_fp, ca
     return scores, any_recomputed
 
 
+# Stable column order for the graph challenge's consolidated tables --
+# GRAPH_LABELS is already insertion-ordered (hexagonal, triangular,
+# periodic_hexagonal, periodic_triangular); pulled out under its own name
+# so "column index for graph X" has one obvious definition every function
+# below shares, rather than each re-deriving list(GRAPH_LABELS).index(...).
+GRAPH_ORDER = list(GRAPH_LABELS)
+
+
 def compute_graph_entries():
-    """{graph_type: [(label, link, {size: {"total", "max"}}), ...]} --
+    """{graph_type: [(name, submitted_at, label, link, {shape: {"total", "max"}}), ...]} --
     the graph-challenge analogue of compute_our_entries(), filtered to
     exactly the registry entries compute_our_entries() itself excludes
     (entry.get("graph", "square") != "square"), so every registered
     baseline is scored by exactly one of the two functions, never both.
     Shares .leaderboard_cache.json with compute_our_entries() (same file,
     same "_harness_fingerprint" gate, disjoint "entries" keys by name).
+
+    Carries name/submitted_at (unlike compute_our_entries()'s total_entries/
+    max_entries, which drop them) because every consumer here needs them:
+    graph_ranked_entries/graph_other_shapes don't, but graph_dated_totals
+    (the progress-chart data) does, and there's no reason to compute the
+    same scores twice just to get a differently-shaped tuple.
     """
     cache = load_score_cache()
     harness_fp = harness_fingerprint()
@@ -301,59 +316,154 @@ def compute_graph_entries():
         )
         status = "recomputed" if any_recomputed else "cached, unchanged"
         print(f"{name} ({status}, graph={graph}): {scores}")
-        by_graph.setdefault(graph, []).append((label, link, scores))
+        by_graph.setdefault(graph, []).append((name, entry["submitted_at"], label, link, scores))
 
     save_score_cache(cache)
     return by_graph
 
 
-def _render_shape_rows(f, rows):
-    f.write("| label | shape | total weight | max weight |\n")
-    f.write("|---|---|---|---|\n")
-    rows = sorted(rows, key=lambda r: r[0])
-    for total, name, size_label, max_weight in rows:
-        f.write(f"| {name} | {size_label} | **{total}** | {max_weight} |\n")
+def _shape_of(key: str) -> tuple[int, int]:
+    lx, ly = (int(v) for v in key.split("x"))
+    return lx, ly
+
+
+def graph_ranked_entries(by_graph, metric):
+    """[(label, link, {graph_column_index: value}), ...] for
+    render_ranked_table -- the graph-challenge analogue of
+    compute_our_entries()'s total_entries/max_entries, column-indexed by
+    lattice type (GRAPH_ORDER) instead of size. Only a shape that
+    is_showcased() for its graph type contributes -- exactly one column
+    value per (label, link) entry, since each only ever has one showcased
+    shape per graph type today, but the dict shape supports more without
+    a rendering change if that ever stops being true.
+    """
+    entries = []
+    for graph, rows in by_graph.items():
+        col = GRAPH_ORDER.index(graph)
+        for name, submitted_at, label, link, scores in rows:
+            for key, s in scores.items():
+                if is_showcased(graph, *_shape_of(key)):
+                    entries.append((label, link, {col: s[metric]}))
+    return entries
+
+
+def graph_paper_entries(metric):
+    """[(method, None, {graph_column_index: value}), ...] for
+    render_ranked_table -- arXiv 2504.21636 Table II's own JW/TT rows, one
+    row per method shared across all four graph-type columns (mirrors
+    paper_entries()'s shape for the square-lattice challenge's
+    PAPER_TOTAL/PAPER_MAX). Table II only reports total weight, not a
+    per-graph max -- see PAPER_TABLE2 -- so this returns [] for "max": no
+    paper reference row on that table, rather than a fabricated one.
+    """
+    if metric != "total":
+        return []
+    methods = {}
+    for graph, weights in PAPER_TABLE2.items():
+        col = GRAPH_ORDER.index(graph)
+        for method, weight in weights.items():
+            methods.setdefault(method, {})[col] = weight
+    # Bare method name, no "[1]" suffix -- render_cell already appends
+    # " [[1]](#references)" itself for any link=None entry (see
+    # paper_entries()'s identical convention for the square-lattice
+    # challenge); adding it here too would show up doubled.
+    return [(method, None, cols) for method, cols in methods.items()]
+
+
+def graph_column_labels():
+    return [f"{GRAPH_LABELS[g]} ({shape_key(*CANONICAL_SHAPE[g])})" for g in GRAPH_ORDER]
+
+
+def graph_other_shapes(by_graph):
+    """[(lattice_label, shape, name, total, max), ...] -- every claimed
+    shape that ISN'T its graph type's CANONICAL_SHAPE, across all four
+    lattice types in one flat list (the consolidated replacement for what
+    used to be a separate "Other shapes" sub-table per graph type). Sorted
+    by lattice label then total weight, so same-lattice rows stay grouped
+    without needing a sub-header per lattice.
+    """
+    rows = []
+    for graph, entries in by_graph.items():
+        for name, submitted_at, label, link, scores in entries:
+            display_name = f"[{label}]({link})" if link else label
+            for key, s in scores.items():
+                if not is_showcased(graph, *_shape_of(key)):
+                    rows.append((GRAPH_LABELS[graph], key, display_name, s["total"], s["max"]))
+    rows.sort(key=lambda r: (r[0], r[3]))
+    return rows
+
+
+def render_other_graph_shapes(f, rows):
+    """Omitted entirely (not even a header) if empty -- no submission has
+    claimed an off-canonical shape yet, so there's nothing to show.
+    """
+    if not rows:
+        return
+    f.write("## Other shapes\n\n")
+    f.write(
+        "Claimed shapes that aren't a graph type's canonical comparison shape "
+        "-- still verified, scored, and cached, just not lined up against the "
+        "paper reference above.\n\n"
+    )
+    f.write("| lattice | shape | label | total weight | max weight |\n")
+    f.write("|---|---|---|---|---|\n")
+    for lattice, shape, name, total, max_weight in rows:
+        f.write(f"| {lattice} | {shape} | {name} | **{total}** | {max_weight} |\n")
     f.write("\n")
 
 
-def render_graph_challenge_table(f, graph, entries):
-    """Renders one graph type's section, split into two tiers:
-
-    - "vs. Table II": only rows at exactly this graph's CANONICAL_SHAPE
-      (the one (Lx, Ly) pair pinned as directly comparable to arXiv
-      2504.21636's own published numbers -- see harness.graphs.CANONICAL_SHAPE
-      for why exact-shape match, not just matching mode count M, is required:
-      different (Lx, Ly) splits at the same M are structurally different
-      graphs for these lattice types). Always includes the paper's own
-      JW/TT reference rows here, never in the section below, since those
-      numbers are only meaningful next to the identical shape.
-    - "Other shapes": every other submitted shape, sorted the same way.
-      Omitted entirely (not even a header) if empty -- no submissions have
-      claimed an off-canonical shape yet, so there's nothing to show.
-
-    Both sections sorted by total weight, ascending.
+def graph_dated_totals(by_graph, graph):
+    """[(name, submitted_at, label, {0: total_weight}), ...] for one graph
+    type's CANONICAL_SHAPE entries, in scripts/progress_chart.py's
+    dated_totals shape -- reused as-is by write_graph_progress_chart via
+    points_at_size(dated_totals, 0), same mechanism as the square-lattice
+    chart. Index 0 is the only "column" since a single-lattice chart only
+    ever plots one shape. Skips an entry with no submitted_at (shouldn't
+    happen -- process_inbox.py always stamps one -- but a manually
+    registered baseline could lack it, and a chart can't place an
+    undated point).
     """
     canon_key = shape_key(*CANONICAL_SHAPE[graph])
+    return [
+        (name, submitted_at, label, {0: scores[canon_key]["total"]})
+        for name, submitted_at, label, link, scores in by_graph.get(graph, [])
+        if submitted_at is not None and canon_key in scores
+    ]
 
-    canon_rows, other_rows = [], []
-    for label, link, scores in entries:
-        name = f"[{label}]({link})" if link else label
-        for key, s in scores.items():
-            lx, ly = (int(v) for v in key.split("x"))
-            row = (s["total"], name, key, s["max"])
-            (canon_rows if is_showcased(graph, lx, ly) else other_rows).append(row)
-    for method, total in PAPER_TABLE2[graph].items():
-        canon_rows.append((total, f"{method} [1]", f"{canon_key} ref.", "--"))
 
-    f.write(f"## {GRAPH_LABELS[graph]}\n\n")
-    f.write("`D = Num + ReHop + ImHop + Inter`\n\n")
+def write_graph_progress_chart(dated_hex_totals) -> str:
+    """Writes assets/progress_hexagonal_weight.png and returns its
+    repo-relative path. Hex-Lattice only (not all four types): its
+    reference numbers are the largest of the four (thousands, vs. Tri-
+    Lattice's low thousands), which makes for a more legible y-axis than
+    cramming all four onto one chart or picking one with a narrower range.
+    Reference lines: our own live-computed JW score at hex's
+    CANONICAL_SHAPE (there's no registered "jw"-for-hexagonal baseline the
+    way the square chart has a plain "jw" to look up, so it's computed
+    directly here, same numbers score_with_cache_graph would cache if a
+    baseline did claim this shape) and the paper's own JW total. May well
+    render with no staircase yet (see docstring of compute_staircase) --
+    reference_lines still draw regardless of whether any points exist.
+    """
+    graph = "hexagonal"
+    lx, ly = CANONICAL_SHAPE[graph]
+    points = points_at_size(dated_hex_totals, 0)
 
-    f.write(f"### vs. Table II ({canon_key})\n\n")
-    _render_shape_rows(f, canon_rows)
+    jw_value, _ = evaluate_graph_baseline(jw_encode, None, graph, lx, ly)
+    paper_jw = PAPER_TABLE2[graph]["JW"]
 
-    if other_rows:
-        f.write("### Other shapes\n\n")
-        _render_shape_rows(f, other_rows)
+    assets_dir = REPO_ROOT / "assets"
+    assets_dir.mkdir(exist_ok=True)
+    out_path = assets_dir / "progress_hexagonal_weight.png"
+    render_progress_chart(
+        points,
+        [("JW", jw_value), ("Table II JW [1]", paper_jw)],
+        out_path,
+        title=f"Total Pauli weight, Hex-Lattice ({shape_key(lx, ly)})",
+        ylabel="Total Pauli weight",
+    )
+    print(f"wrote {out_path}")
+    return f"assets/{out_path.name}?v={hash_file(out_path)[:12]}"
 
 
 def compute_our_entries():
@@ -488,21 +598,33 @@ def write_memory_index(path: Path, baselines_dir: Path, names_and_labels) -> Non
     print(f"wrote {path}")
 
 
-def render_ranked_table(f, title, formula, entries):
+def render_ranked_table(f, title, formula, entries, column_labels=None):
+    """Renders one rank-based table: rows are rank positions (row 1 is
+    whoever wins at that column, not a fixed encoding -- see the module
+    docstring), columns are whatever column_labels names. Defaults to the
+    square-lattice challenge's own 3x3..15x15 header (column i = SIZES[i]);
+    the graph challenge passes its own four lattice-type labels instead,
+    reusing this same function rather than a second copy of the rank/tie
+    logic -- entries is already shaped identically either way:
+    [(label, link, {column_index: value}), ...].
+    """
+    if column_labels is None:
+        column_labels = [f"{l}×{l}" for l in SIZES]
+
     f.write(f"## {title}\n\n")
     f.write(f"`{formula}`\n\n")
 
     columns = []
-    for i in range(len(SIZES)):
+    for i in range(len(column_labels)):
         col = [(values[i], label, link) for label, link, values in entries if i in values]
         col.sort(key=lambda t: t[0])
         columns.append(group_ties(col))
 
-    max_rows = max(len(c) for c in columns)
+    max_rows = max((len(c) for c in columns), default=0)
 
-    header = " | ".join(f"{l}×{l}" for l in SIZES)
+    header = " | ".join(column_labels)
     f.write(f"| rank | {header} |\n")
-    f.write("|---" * (len(SIZES) + 1) + "|\n")
+    f.write("|---" * (len(column_labels) + 1) + "|\n")
 
     for rank in range(max_rows):
         cells = []
@@ -650,17 +772,41 @@ def write_graph_challenge_leaderboard():
     D = Num + ReHop + ImHop + Inter metric. Nothing here reads or writes
     LEADERBOARD.md, _leaderboard_body.md, MEMORY.md, or
     assets/progress_total_weight.png.
+
+    One consolidated pair of ranked tables (total, max), columns = the
+    four lattice types, mirroring LEADERBOARD.md's own layout exactly --
+    row 1 is whoever wins at that lattice type, not a fixed encoding, same
+    tie-handling and same [1]-linked paper reference rows -- rather than
+    four separate one-table-per-graph-type sections. A claimed shape that
+    isn't its graph type's CANONICAL_SHAPE still gets verified, scored,
+    and cached, just folded into one shared "Other shapes" table below
+    instead of the headline comparison.
     """
     by_graph = compute_graph_entries()
+    chart_path = write_graph_progress_chart(graph_dated_totals(by_graph, "hexagonal"))
 
     graph_body = io.StringIO()
-    for graph in GRAPH_LABELS:
-        # Always rendered, even with zero real submissions yet -- the
-        # paper's own PAPER_TABLE2 reference rows are static, not
-        # submission-dependent, same as how the square-lattice tables
-        # always show their paper reference rows regardless of what's
-        # been submitted.
-        render_graph_challenge_table(graph_body, graph, by_graph.get(graph, []))
+    graph_body.write(
+        f"![Total Pauli weight progress, Hex-Lattice]({chart_path})\n\n"
+        "Best total Pauli weight reached so far on the Hex-Lattice at its "
+        "canonical shape, plotted against submission date -- shown for "
+        "Hex-Lattice only since its reference numbers are the largest of "
+        "the four lattice types, giving the clearest y-axis. Dashed lines "
+        "are the JW reference and arXiv 2504.21636's own published Table "
+        "II JW row. See the full tables below for the complete picture "
+        "across all four lattice types.\n\n"
+    )
+    render_ranked_table(
+        graph_body, "Total Pauli weight", "D = Num + ReHop + ImHop + Inter",
+        graph_ranked_entries(by_graph, "total") + graph_paper_entries("total"),
+        column_labels=graph_column_labels(),
+    )
+    render_ranked_table(
+        graph_body, "Maximum Pauli weight", "D = max(Num, ReHop, ImHop, Inter)",
+        graph_ranked_entries(by_graph, "max") + graph_paper_entries("max"),
+        column_labels=graph_column_labels(),
+    )
+    render_other_graph_shapes(graph_body, graph_other_shapes(by_graph))
     graph_body.write(
         "## References\n\n"
         "[1] Chiew, Ibrahim, Safro, Strelchuk, *Optimal fermion-qubit mappings "
@@ -679,9 +825,12 @@ def write_graph_challenge_leaderboard():
             "2504.21636's Table II (hexagonal, triangular, and their periodic "
             "variants, not square grids), scored under the exact same "
             "`D = Num + ReHop + ImHop + Inter` metric as the square-lattice "
-            "challenge. Same non-negotiable rule as the square-lattice challenge: "
-            "the harness does not search orderings on a submission's behalf; each "
-            "graph type ships one canonical default ordering (see "
+            "challenge. Same layout as `LEADERBOARD.md` too: rows are rank "
+            "positions, not fixed encodings, and columns are the four lattice "
+            "types (at each one's canonical shape, named in the header) instead "
+            "of lattice sizes. Same non-negotiable rule as the square-lattice "
+            "challenge: the harness does not search orderings on a submission's "
+            "behalf; each graph type ships one canonical default ordering (see "
             "`harness/graphs.py`), overridable by a submission's own declared "
             "`order(Lx, Ly) -> perm` exactly as today.\n\n"
             "A submission declares which shape(s) it targets as explicit `Lx x Ly` "
@@ -691,14 +840,14 @@ def write_graph_challenge_leaderboard():
             "Ly)` splits at the same `M` are structurally different graphs (see "
             "`harness/graphs.py`'s `CANONICAL_SHAPE`). Each graph type has exactly "
             "one shape pinned as directly comparable to the paper's own numbers "
-            "(the \"vs. Table II\" section below); a submission at any other "
+            "(shown in the table columns below); a submission at any other "
             "shape still gets verified, scored, and cached, and shows up in the "
-            "\"Other shapes\" section, just not against `[1]`. `[1]` rows are "
+            "\"Other shapes\" table, just not against `[1]`. `[1]` rows are "
             "arXiv 2504.21636's own published Table II -- our own construction of "
             "the canonical shape won't reproduce those numbers exactly (the paper "
             "doesn't state the exact shape it used), only land in the same "
             "ballpark; see NOTES.md.\n\n"
-            "Lower is better, on both columns.\n\n"
+            "Lower is better, on both tables.\n\n"
         )
         f.write(graph_body_text)
     print(f"wrote {graphs_path}")

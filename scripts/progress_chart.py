@@ -198,7 +198,6 @@ def render_progress_chart(points, reference_lines, out_path, title, ylabel):
         )
 
     ax.set_title(title, fontsize=15, fontweight="bold", loc="left", pad=14)
-    ax.set_xlabel("Submission date (ET)", fontsize=9)
     ax.set_ylabel(ylabel, fontsize=10)
     ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda v, _: f"{int(v):,}"))
     ax.grid(axis="y", color="#e9ecef", linewidth=1, zorder=0)
@@ -208,11 +207,31 @@ def render_progress_chart(points, reference_lines, out_path, title, ylabel):
     for side in ("left", "bottom"):
         ax.spines[side].set_color("#d0d3d8")
 
-    locator = mdates.AutoDateLocator(tz=DISPLAY_TZ)
-    ax.xaxis.set_major_locator(locator)
-    ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(locator, tz=DISPLAY_TZ))
-    if DISPLAY_START is not None:
-        ax.set_xlim(left=DISPLAY_START)
+    if points:
+        ax.set_xlabel("Submission date (ET)", fontsize=9)
+        locator = mdates.AutoDateLocator(tz=DISPLAY_TZ)
+        ax.xaxis.set_major_locator(locator)
+        ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(locator, tz=DISPLAY_TZ))
+        if DISPLAY_START is not None:
+            ax.set_xlim(left=DISPLAY_START)
+    else:
+        # No submissions yet -- a date axis with nothing plotted on it has
+        # no real data to establish a domain, so matplotlib's own default
+        # autoscale renders a meaningless (and, empirically, backwards)
+        # date range. The reference lines are still real information (an
+        # axhline's y-value participates in autoscale regardless of x), so
+        # show them against a plain, deliberately unlabeled x-axis instead
+        # of a broken one.
+        ax.set_xlim(0, 1)
+        ax.set_xticks([])
+        # Vertical center, not a fixed low y -- the two reference lines'
+        # data-coordinate y-values (hence where they land in axes-fraction
+        # terms) vary by chart, so a fixed low position risks colliding
+        # with whichever reference line happens to sit near the bottom.
+        ax.text(
+            0.5, 0.5, "No submissions yet", transform=ax.transAxes,
+            ha="center", va="center", fontsize=9, color="#8a8f98", style="italic",
+        )
 
     # Fixed margins rather than tight_layout: the reference-line labels are
     # drawn outside the axes proper (axes-fraction x > 1), which

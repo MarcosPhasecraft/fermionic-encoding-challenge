@@ -24,11 +24,25 @@ they called it is fine to keep. Several pending submissions can sit in
 
 ## `submission.json`
 
+Square-lattice challenge (the default -- `graph` omitted):
+
 ```json
 {
   "name": "alice_bk_variant",
   "label": "Alice's BK Variant",
   "sizes": "3-15",
+  "generated_by": "Claude Opus 4.5"
+}
+```
+
+Graph challenge (non-square lattices -- note `sizes`' different grammar, and the added `"graph"` field):
+
+```json
+{
+  "name": "alice_hex_variant",
+  "label": "Alice's Hex-Lattice Variant",
+  "sizes": "8x4,15x15",
+  "graph": "hexagonal",
   "generated_by": "Claude Opus 4.5"
 }
 ```
@@ -75,6 +89,17 @@ they called it is fine to keep. Several pending submissions can sit in
   `D = Num + ReHop + ImHop + Inter` metric as the square-lattice
   challenge — only the graphs differ, not the metric.
 
+  **How `LEADERBOARD_GRAPHS.md` is laid out.** Same shape as
+  `LEADERBOARD.md`: two rank-based tables (total weight, max weight), row
+  1 is whoever wins, not a fixed encoding. The only difference is what the
+  columns are — `LEADERBOARD.md`'s columns are lattice *sizes* (`3x3` ..
+  `15x15`); `LEADERBOARD_GRAPHS.md`'s columns are the four lattice
+  *types* (Hex-Lattice, Tri-Lattice, Periodic Hex-Lattice, Periodic
+  Tri-Lattice), each labeled with its `CANONICAL_SHAPE`. There's also a
+  progress-over-time chart at the top, like `LEADERBOARD.md`'s, but for
+  Hex-Lattice only (its reference numbers are the largest of the four,
+  giving the clearest y-axis).
+
   **Which shapes/sizes actually get shown on a leaderboard.** A submission
   can claim any valid shape for its challenge, but only some are rendered:
   for `graph="square"`, exactly the integer sizes `3..15` (`Lx = Ly`,
@@ -82,14 +107,14 @@ they called it is fine to keep. Several pending submissions can sit in
   off-square rectangle or an out-of-range size is still verified, scored,
   and cached, just not shown anywhere yet. For every other graph type,
   exactly one `(Lx, Ly)` pinned as that type's `CANONICAL_SHAPE`
-  (`harness/graphs.py`) shows up in `LEADERBOARD_GRAPHS.md`'s "vs. Table
-  II" section, next to the paper's own published numbers — gated on the
+  (`harness/graphs.py`) shows up in `LEADERBOARD_GRAPHS.md`'s two ranked
+  tables, next to the paper's own published numbers — gated on the
   *exact* shape, not just matching `M`, since (as above) comparing by `M`
   alone would let a submission pick whichever aspect ratio is easiest to
   encode well while still nominally "matching" the paper. A submission at
-  any other shape for that graph type is still scored and shown, in the
-  "Other shapes" section of the same table, just not lined up against
-  `[1]`. This decision lives in one place, `is_showcased()` in
+  any other shape for that graph type is still scored and shown, in a
+  separate "Other shapes" table below the two ranked ones, just not lined
+  up against `[1]`. This decision lives in one place, `is_showcased()` in
   `scripts/update_leaderboard.py`, so it can gain new showcased
   shapes/sizes later without a rendering rewrite. Include the showcased
   shape/size in your `sizes` string if you want your submission to appear
@@ -143,7 +168,7 @@ if a submission passes, registers it and moves its folder to
 `encode.py` are archived there unchanged). A submission that fails is left
 exactly where it is — fix it and run the command again.
 
-If anything was accepted, the script regenerates `LEADERBOARD.md` and
-`MEMORY.md`, re-runs the test suite, prints a summary, and only then asks
-you — on the terminal, not through an AI — whether to push, commit
-locally, or do neither.
+If anything was accepted, the script regenerates `LEADERBOARD.md`,
+`LEADERBOARD_GRAPHS.md`, and `MEMORY.md`, re-runs the test suite, prints a
+summary, and only then asks you — on the terminal, not through an AI —
+whether to push, commit locally, or do neither.

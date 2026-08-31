@@ -223,7 +223,7 @@ def test_compute_graph_entries_groups_by_graph_type(monkeypatch):
     monkeypatch.setattr(update_leaderboard, "BASELINES", {
         "alice": {
             "encode": None, "order": None, "sizes": [(8, 4)], "label": "Alice",
-            "module": "baselines.alice", "graph": "hexagonal",
+            "module": "baselines.alice", "graph": "hexagonal", "submitted_at": "2026-01-01T00:00:00+00:00",
         },
     })
     monkeypatch.setattr(update_leaderboard, "load_score_cache", lambda: {})
@@ -238,80 +238,159 @@ def test_compute_graph_entries_groups_by_graph_type(monkeypatch):
     by_graph = update_leaderboard.compute_graph_entries()
 
     assert list(by_graph.keys()) == ["hexagonal"]
-    label, link, scores = by_graph["hexagonal"][0]
+    name, submitted_at, label, link, scores = by_graph["hexagonal"][0]
+    assert name == "alice"
+    assert submitted_at == "2026-01-01T00:00:00+00:00"
     assert label == "Alice"
     assert scores == {"8x4": {"total": 42, "max": 1}}
 
 
-# --- render_graph_challenge_table ---
+# --- graph_ranked_entries / graph_paper_entries / graph_column_labels ---
 
 
-def test_render_graph_challenge_table_includes_submission_and_paper_rows(tmp_path, monkeypatch):
-    monkeypatch.setitem(update_leaderboard.PAPER_TABLE2, "hexagonal", {"JW": 100, "TT": 50})
+def _graph_entry(name="alice", submitted_at="2026-01-01T00:00:00+00:00", label="Alice", link=None, **scores):
+    return (name, submitted_at, label, link, scores)
+
+
+def test_graph_ranked_entries_includes_only_showcased_shapes():
+    # hexagonal's CANONICAL_SHAPE is (8, 4).
+    by_graph = {
+        "hexagonal": [_graph_entry(**{
+            "8x4": {"total": 42, "max": 5}, "3x3": {"total": 99, "max": 9},
+        })],
+    }
+
+    entries = update_leaderboard.graph_ranked_entries(by_graph, "total")
+
+    col = update_leaderboard.GRAPH_ORDER.index("hexagonal")
+    assert entries == [("Alice", None, {col: 42})]  # 3x3 (not showcased) is excluded
+
+
+def test_graph_ranked_entries_column_matches_graph_order():
+    by_graph = {
+        "triangular": [_graph_entry(**{"8x8": {"total": 7, "max": 3}})],  # triangular's CANONICAL_SHAPE
+    }
+
+    entries = update_leaderboard.graph_ranked_entries(by_graph, "total")
+
+    col = update_leaderboard.GRAPH_ORDER.index("triangular")
+    assert entries == [("Alice", None, {col: 7})]
+
+
+def test_graph_paper_entries_total_has_one_row_per_method():
+    entries = update_leaderboard.graph_paper_entries("total")
+    labels = {label for label, link, cols in entries}
+    assert labels == {"JW", "TT"}
+    for label, link, cols in entries:
+        assert link is None
+        assert set(cols.keys()) == set(range(len(update_leaderboard.GRAPH_ORDER)))
+
+
+def test_graph_paper_entries_max_is_empty():
+    # Table II reports total weight only -- no fabricated max reference.
+    assert update_leaderboard.graph_paper_entries("max") == []
+
+
+def test_graph_column_labels_names_each_graph_and_its_canonical_shape():
+    labels = update_leaderboard.graph_column_labels()
+    assert labels[update_leaderboard.GRAPH_ORDER.index("hexagonal")] == "Hex-Lattice (8x4)"
+    assert labels[update_leaderboard.GRAPH_ORDER.index("triangular")] == "Tri-Lattice (8x8)"
+
+
+# --- graph_other_shapes / render_other_graph_shapes ---
+
+
+def test_graph_other_shapes_excludes_canonical_shape():
+    by_graph = {
+        "triangular": [_graph_entry(link="baselines/alice.py", **{
+            "8x8": {"total": 7, "max": 3},  # canonical -- excluded
+            "3x3": {"total": 99, "max": 9},  # not canonical -- included
+        })],
+    }
+
+    rows = update_leaderboard.graph_other_shapes(by_graph)
+
+    assert rows == [("Tri-Lattice", "3x3", "[Alice](baselines/alice.py)", 99, 9)]
+
+
+def test_graph_other_shapes_sorted_by_lattice_then_total():
+    by_graph = {
+        "triangular": [_graph_entry(label="B", **{"3x3": {"total": 50, "max": 5}})],
+        "hexagonal": [_graph_entry(label="A", **{"3x3": {"total": 10, "max": 5}})],
+    }
+
+    rows = update_leaderboard.graph_other_shapes(by_graph)
+
+    assert [r[0] for r in rows] == ["Hex-Lattice", "Tri-Lattice"]
+
+
+def test_render_other_graph_shapes_omitted_when_empty():
     import io
     f = io.StringIO()
-
-    # Hexagonal's CANONICAL_SHAPE is (8, 4) -- this submission's shape key
-    # must match it exactly to land in the "vs. Table II" section alongside
-    # the paper rows.
-    update_leaderboard.render_graph_challenge_table(
-        f, "hexagonal", [("Alice", "baselines/alice.py", {"8x4": {"total": 42, "max": 5}})],
-    )
-
-    content = f.getvalue()
-    assert "Hex-Lattice" in content
-    assert "vs. Table II" in content
-    assert "[Alice](baselines/alice.py)" in content
-    assert "**42**" in content
-    assert "JW [1]" in content
-    assert "**100**" in content
+    update_leaderboard.render_other_graph_shapes(f, [])
+    assert f.getvalue() == ""
 
 
-def test_render_graph_challenge_table_sorts_by_total_weight_ascending(monkeypatch):
-    monkeypatch.setitem(update_leaderboard.PAPER_TABLE2, "triangular", {"JW": 100})
+def test_render_other_graph_shapes_renders_rows():
     import io
     f = io.StringIO()
-
-    # Triangular's CANONICAL_SHAPE is (8, 8).
-    update_leaderboard.render_graph_challenge_table(
-        f, "triangular", [("Better", None, {"8x8": {"total": 10, "max": 2}})],
-    )
-
-    content = f.getvalue()
-    better_row_pos = content.index("**10**")
-    paper_row_pos = content.index("**100**")
-    assert better_row_pos < paper_row_pos
-
-
-def test_render_graph_challenge_table_splits_off_canonical_shape_into_other_section(monkeypatch):
-    monkeypatch.setitem(update_leaderboard.PAPER_TABLE2, "triangular", {"JW": 100})
-    import io
-    f = io.StringIO()
-
-    # (3, 3) is not triangular's CANONICAL_SHAPE (8, 8) -- must land in
-    # "Other shapes", not alongside the paper's [1] reference rows.
-    update_leaderboard.render_graph_challenge_table(
-        f, "triangular", [("Offbeat", None, {"3x3": {"total": 5, "max": 2}})],
-    )
-
+    update_leaderboard.render_other_graph_shapes(f, [("Tri-Lattice", "3x3", "Alice", 99, 9)])
     content = f.getvalue()
     assert "Other shapes" in content
-    other_pos = content.index("Other shapes")
-    offbeat_pos = content.index("Offbeat")
-    assert offbeat_pos > other_pos  # Offbeat's row is in the "Other shapes" section, after its header
-    assert "JW [1]" in content.split("Other shapes")[0]  # paper row stays in the vs. Table II section
+    assert "Tri-Lattice" in content and "3x3" in content and "**99**" in content
 
 
-def test_render_graph_challenge_table_omits_other_shapes_section_when_empty(monkeypatch):
-    monkeypatch.setitem(update_leaderboard.PAPER_TABLE2, "triangular", {"JW": 100})
+# --- graph_dated_totals: for write_graph_progress_chart ---
+
+
+def test_graph_dated_totals_only_canonical_shape():
+    by_graph = {
+        "hexagonal": [_graph_entry(name="alice", submitted_at="2026-01-02T00:00:00+00:00", **{
+            "8x4": {"total": 42, "max": 5}, "3x3": {"total": 1, "max": 1},
+        })],
+    }
+
+    dated = update_leaderboard.graph_dated_totals(by_graph, "hexagonal")
+
+    assert dated == [("alice", "2026-01-02T00:00:00+00:00", "Alice", {0: 42})]
+
+
+def test_graph_dated_totals_skips_entries_without_a_timestamp():
+    by_graph = {
+        "hexagonal": [_graph_entry(submitted_at=None, **{"8x4": {"total": 42, "max": 5}})],
+    }
+
+    assert update_leaderboard.graph_dated_totals(by_graph, "hexagonal") == []
+
+
+def test_graph_dated_totals_skips_entries_missing_the_canonical_shape():
+    by_graph = {
+        "hexagonal": [_graph_entry(**{"3x3": {"total": 1, "max": 1}})],
+    }
+
+    assert update_leaderboard.graph_dated_totals(by_graph, "hexagonal") == []
+
+
+# --- render_ranked_table: custom column_labels ---
+
+
+def test_render_ranked_table_with_custom_column_labels():
     import io
     f = io.StringIO()
-
-    update_leaderboard.render_graph_challenge_table(
-        f, "triangular", [("OnCanon", None, {"8x8": {"total": 5, "max": 2}})],
+    update_leaderboard.render_ranked_table(
+        f, "Title", "formula", [("Alice", None, {0: 10, 1: 20})],
+        column_labels=["Foo", "Bar"],
     )
+    content = f.getvalue()
+    assert "| rank | Foo | Bar |" in content
+    assert "**10**" in content and "**20**" in content
 
-    assert "Other shapes" not in f.getvalue()
+
+def test_render_ranked_table_empty_entries_renders_header_only():
+    import io
+    f = io.StringIO()
+    update_leaderboard.render_ranked_table(f, "Title", "formula", [], column_labels=["Foo"])
+    assert "| rank | Foo |" in f.getvalue()
 
 
 # --- is_showcased ---
