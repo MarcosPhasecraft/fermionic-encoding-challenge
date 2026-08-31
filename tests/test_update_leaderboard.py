@@ -245,78 +245,100 @@ def test_compute_graph_entries_groups_by_graph_type(monkeypatch):
     assert scores == {"8x4": {"total": 42, "max": 1}}
 
 
-# --- graph_ranked_entries / graph_paper_entries / graph_column_labels ---
+# --- graph_sweep_entries / graph_paper_entries / graph_sweep_column_labels ---
 
 
 def _graph_entry(name="alice", submitted_at="2026-01-01T00:00:00+00:00", label="Alice", link=None, **scores):
     return (name, submitted_at, label, link, scores)
 
 
-def test_graph_ranked_entries_includes_only_showcased_shapes():
-    # hexagonal's CANONICAL_SHAPE is (8, 4).
+def test_graph_sweep_entries_includes_only_showcased_shapes():
+    # triangular's sweep is 3x3..15x15 (Lx=Ly); 8x12 is off-square.
     by_graph = {
-        "hexagonal": [_graph_entry(**{
-            "8x4": {"total": 42, "max": 5}, "3x3": {"total": 99, "max": 9},
+        "triangular": [_graph_entry(**{
+            "8x8": {"total": 42, "max": 5}, "8x12": {"total": 99, "max": 9},
         })],
     }
 
-    entries = update_leaderboard.graph_ranked_entries(by_graph, "total")
+    entries = update_leaderboard.graph_sweep_entries(by_graph, "triangular", "total")
 
-    col = update_leaderboard.GRAPH_ORDER.index("hexagonal")
-    assert entries == [("Alice", None, {col: 42})]  # 3x3 (not showcased) is excluded
+    col = update_leaderboard.GRAPH_SWEEP_SIZES["triangular"].index(8)
+    assert entries == [("Alice", None, {col: 42})]  # 8x12 (not showcased) is excluded
 
 
-def test_graph_ranked_entries_column_matches_graph_order():
-    by_graph = {
-        "triangular": [_graph_entry(**{"8x8": {"total": 7, "max": 3}})],  # triangular's CANONICAL_SHAPE
-    }
+def test_graph_sweep_entries_column_matches_sweep_index():
+    by_graph = {"hexagonal": [_graph_entry(**{"5x5": {"total": 7, "max": 3}})]}
 
-    entries = update_leaderboard.graph_ranked_entries(by_graph, "total")
+    entries = update_leaderboard.graph_sweep_entries(by_graph, "hexagonal", "total")
 
-    col = update_leaderboard.GRAPH_ORDER.index("triangular")
+    col = update_leaderboard.GRAPH_SWEEP_SIZES["hexagonal"].index(5)
     assert entries == [("Alice", None, {col: 7})]
 
 
-def test_graph_paper_entries_total_has_one_row_per_method():
-    entries = update_leaderboard.graph_paper_entries("total")
+def test_graph_sweep_entries_omits_entry_with_no_showcased_shape():
+    by_graph = {"triangular": [_graph_entry(**{"8x12": {"total": 99, "max": 9}})]}
+    assert update_leaderboard.graph_sweep_entries(by_graph, "triangular", "total") == []
+
+
+def test_graph_paper_entries_triangular_total_has_one_row_per_method():
+    # Triangular's CANONICAL_SHAPE (8, 8) is Lx=Ly and inside its sweep.
+    entries = update_leaderboard.graph_paper_entries("triangular", "total")
     labels = {label for label, link, cols in entries}
     assert labels == {"JW", "TT"}
+    col = update_leaderboard.GRAPH_SWEEP_SIZES["triangular"].index(8)
     for label, link, cols in entries:
         assert link is None
-        assert set(cols.keys()) == set(range(len(update_leaderboard.GRAPH_ORDER)))
+        assert cols == {col: update_leaderboard.PAPER_TABLE2["triangular"][label]}
 
 
-def test_graph_paper_entries_max_is_empty():
+def test_graph_paper_entries_hexagonal_is_empty():
+    # Hexagonal's CANONICAL_SHAPE (8, 4) is not Lx=Ly, so it has no valid
+    # column in the Lx=Ly-only sweep -- no paper row, not a misplaced one.
+    assert update_leaderboard.graph_paper_entries("hexagonal", "total") == []
+
+
+def test_graph_paper_entries_max_is_always_empty():
     # Table II reports total weight only -- no fabricated max reference.
-    assert update_leaderboard.graph_paper_entries("max") == []
+    assert update_leaderboard.graph_paper_entries("triangular", "max") == []
+    assert update_leaderboard.graph_paper_entries("hexagonal", "max") == []
 
 
-def test_graph_column_labels_names_each_graph_and_its_canonical_shape():
-    labels = update_leaderboard.graph_column_labels()
-    assert labels[update_leaderboard.GRAPH_ORDER.index("hexagonal")] == "Hex-Lattice (8x4)"
-    assert labels[update_leaderboard.GRAPH_ORDER.index("triangular")] == "Tri-Lattice (8x8)"
+def test_graph_sweep_column_labels():
+    assert update_leaderboard.graph_sweep_column_labels("hexagonal")[0] == "3×3"
+    assert len(update_leaderboard.graph_sweep_column_labels("triangular")) == 13
+    assert len(update_leaderboard.graph_sweep_column_labels("hexagonal")) == 8
 
 
 # --- graph_other_shapes / render_other_graph_shapes ---
 
 
-def test_graph_other_shapes_excludes_canonical_shape():
+def test_graph_other_shapes_excludes_showcased_shape():
     by_graph = {
         "triangular": [_graph_entry(link="baselines/alice.py", **{
-            "8x8": {"total": 7, "max": 3},  # canonical -- excluded
-            "3x3": {"total": 99, "max": 9},  # not canonical -- included
+            "8x8": {"total": 7, "max": 3},  # showcased -- excluded
+            "8x12": {"total": 99, "max": 9},  # off-square -- included
         })],
     }
 
     rows = update_leaderboard.graph_other_shapes(by_graph)
 
-    assert rows == [("Tri-Lattice", "3x3", "[Alice](baselines/alice.py)", 99, 9)]
+    assert rows == [("Tri-Lattice", "8x12", "[Alice](baselines/alice.py)", 99, 9)]
+
+
+def test_graph_other_shapes_includes_periodic_types_entirely():
+    # periodic_hexagonal/periodic_triangular have no sweep at all -- every
+    # shape they claim lands here, even an Lx=Ly one.
+    by_graph = {"periodic_hexagonal": [_graph_entry(**{"8x4": {"total": 5, "max": 2}})]}
+
+    rows = update_leaderboard.graph_other_shapes(by_graph)
+
+    assert rows == [("Periodic Hex-Lattice", "8x4", "Alice", 5, 2)]
 
 
 def test_graph_other_shapes_sorted_by_lattice_then_total():
     by_graph = {
-        "triangular": [_graph_entry(label="B", **{"3x3": {"total": 50, "max": 5}})],
-        "hexagonal": [_graph_entry(label="A", **{"3x3": {"total": 10, "max": 5}})],
+        "triangular": [_graph_entry(label="B", **{"8x12": {"total": 50, "max": 5}})],
+        "hexagonal": [_graph_entry(label="A", **{"8x12": {"total": 10, "max": 5}})],
     }
 
     rows = update_leaderboard.graph_other_shapes(by_graph)
@@ -334,41 +356,36 @@ def test_render_other_graph_shapes_omitted_when_empty():
 def test_render_other_graph_shapes_renders_rows():
     import io
     f = io.StringIO()
-    update_leaderboard.render_other_graph_shapes(f, [("Tri-Lattice", "3x3", "Alice", 99, 9)])
+    update_leaderboard.render_other_graph_shapes(f, [("Tri-Lattice", "8x12", "Alice", 99, 9)])
     content = f.getvalue()
     assert "Other shapes" in content
-    assert "Tri-Lattice" in content and "3x3" in content and "**99**" in content
+    assert "Tri-Lattice" in content and "8x12" in content and "**99**" in content
 
 
 # --- graph_dated_totals: for write_graph_progress_chart ---
 
 
-def test_graph_dated_totals_only_canonical_shape():
+def test_graph_dated_totals_only_showcased_shape():
     by_graph = {
-        "hexagonal": [_graph_entry(name="alice", submitted_at="2026-01-02T00:00:00+00:00", **{
-            "8x4": {"total": 42, "max": 5}, "3x3": {"total": 1, "max": 1},
+        "triangular": [_graph_entry(name="alice", submitted_at="2026-01-02T00:00:00+00:00", **{
+            "8x8": {"total": 42, "max": 5}, "8x12": {"total": 1, "max": 1},
         })],
     }
 
-    dated = update_leaderboard.graph_dated_totals(by_graph, "hexagonal")
+    dated = update_leaderboard.graph_dated_totals(by_graph, "triangular")
 
-    assert dated == [("alice", "2026-01-02T00:00:00+00:00", "Alice", {0: 42})]
+    col = update_leaderboard.GRAPH_SWEEP_SIZES["triangular"].index(8)
+    assert dated == [("alice", "2026-01-02T00:00:00+00:00", "Alice", {col: 42})]
 
 
 def test_graph_dated_totals_skips_entries_without_a_timestamp():
-    by_graph = {
-        "hexagonal": [_graph_entry(submitted_at=None, **{"8x4": {"total": 42, "max": 5}})],
-    }
-
-    assert update_leaderboard.graph_dated_totals(by_graph, "hexagonal") == []
+    by_graph = {"triangular": [_graph_entry(submitted_at=None, **{"8x8": {"total": 42, "max": 5}})]}
+    assert update_leaderboard.graph_dated_totals(by_graph, "triangular") == []
 
 
-def test_graph_dated_totals_skips_entries_missing_the_canonical_shape():
-    by_graph = {
-        "hexagonal": [_graph_entry(**{"3x3": {"total": 1, "max": 1}})],
-    }
-
-    assert update_leaderboard.graph_dated_totals(by_graph, "hexagonal") == []
+def test_graph_dated_totals_skips_entries_with_no_showcased_shape():
+    by_graph = {"triangular": [_graph_entry(**{"8x12": {"total": 1, "max": 1}})]}
+    assert update_leaderboard.graph_dated_totals(by_graph, "triangular") == []
 
 
 # --- render_ranked_table: custom column_labels ---
@@ -414,13 +431,33 @@ def test_is_showcased_square_out_of_range_not_showcased():
     assert update_leaderboard.is_showcased("square", 20, 20) is False
 
 
-def test_is_showcased_graph_type_canonical_shape():
-    assert update_leaderboard.is_showcased("hexagonal", 8, 4) is True
+def test_is_showcased_triangular_in_sweep():
     assert update_leaderboard.is_showcased("triangular", 8, 8) is True
+    assert update_leaderboard.is_showcased("triangular", 15, 15) is True
 
 
-def test_is_showcased_graph_type_off_canonical_shape_not_showcased():
-    assert update_leaderboard.is_showcased("hexagonal", 15, 15) is False
+def test_is_showcased_hexagonal_in_sweep():
+    assert update_leaderboard.is_showcased("hexagonal", 8, 8) is True
+    assert update_leaderboard.is_showcased("hexagonal", 10, 10) is True
+
+
+def test_is_showcased_hexagonal_canonical_shape_not_showcased():
+    # (8, 4) is hexagonal's own paper-comparison shape, but Lx != Ly, so
+    # it has no column in the Lx=Ly-only sweep -- not showcased.
+    assert update_leaderboard.is_showcased("hexagonal", 8, 4) is False
+
+
+def test_is_showcased_triangular_out_of_sweep_range_not_showcased():
+    assert update_leaderboard.is_showcased("triangular", 16, 16) is False
+
+
+def test_is_showcased_hexagonal_out_of_sweep_range_not_showcased():
+    assert update_leaderboard.is_showcased("hexagonal", 11, 11) is False
+
+
+def test_is_showcased_periodic_types_never_showcased():
+    assert update_leaderboard.is_showcased("periodic_hexagonal", 8, 4) is False
+    assert update_leaderboard.is_showcased("periodic_triangular", 8, 8) is False
 
 
 # --- compute_our_entries: mixed square sizes ---

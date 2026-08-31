@@ -85,7 +85,6 @@ from scripts.submission_lib import (
 )
 
 from baselines import BASELINES
-from baselines.jw import encode as jw_encode
 from harness.evaluate import evaluate
 from harness.graphs import CANONICAL_SHAPE, build_spec as build_graph_spec
 from harness.lattice import build_spec, hamiltonian
@@ -93,24 +92,44 @@ from harness.lattice import build_spec, hamiltonian
 SIZES = list(range(3, 16))
 
 
+# Range of Lx=Ly sizes shown in each graph type's own sweep table/chart --
+# mirrors SIZES, but per graph type, since hexagonal's mode count
+# (M = 2*Lx*Ly, two sites per unit cell) grows twice as fast as
+# triangular's (M = Lx*Ly, same as the square lattice). A shared upper
+# bound would leave hexagonal's top qubit count roughly double
+# triangular's; capped instead so the two land in the same ballpark
+# (hexagonal 10x10 = 200 qubits, triangular 15x15 = 225) -- a submission's
+# own encode() may do real optimization work, so the qubit count a
+# verifier run actually has to handle matters, not just what our own
+# reference baselines need. periodic_hexagonal/periodic_triangular have
+# no sweep defined -- not shown in any table yet (still submittable,
+# still scored and cached, same as any other is_showcased()-excluded
+# shape -- see NOTES.md).
+GRAPH_SWEEP_SIZES = {
+    "triangular": list(range(3, 16)),
+    "hexagonal": list(range(3, 11)),
+}
+
+
 def is_showcased(graph: str, lx: int, ly: int) -> bool:
     """Whether a (graph, Lx, Ly) shape appears in a rendered table/chart, as
     opposed to just being verified, scored, and cached. The single place
-    this decision is made -- everything downstream (compute_our_entries,
-    compute_graph_entries, the two render_* functions) just calls this,
-    so showcasing a new shape later (a wider square range, a second
-    canonical hex shape, a new graph type) is a one-line edit here, not a
+    this decision is made -- everything downstream just calls this, so
+    showcasing a new shape/graph type later is a one-line edit here, not a
     rendering rewrite. Today: square shapes showcase iff they're an exact
     L x L within SIZES (arXiv 2504.21636 Table I's own 3x3..15x15 sweep);
-    every other graph type showcases iff it's an exact match to that
-    type's CANONICAL_SHAPE (Table II's 64-mode instances). Anything else
-    -- an off-square rectangle, an off-canonical hex/tri shape -- is still
-    verified/scored/cached (see scripts/submission_lib.py's
-    validate_mixed_sizes and scripts/process_inbox.py), just not shown.
+    triangular/hexagonal showcase iff they're an exact L x L within that
+    graph type's own GRAPH_SWEEP_SIZES; periodic_hexagonal/
+    periodic_triangular never showcase (no sweep defined for them).
+    Anything else -- an off-square rectangle, an out-of-range size, any
+    periodic-type shape -- is still verified/scored/cached (see
+    scripts/submission_lib.py's validate_mixed_sizes/validate_shapes and
+    scripts/process_inbox.py), just not shown.
     """
     if graph == "square":
         return lx == ly and lx in SIZES
-    return (lx, ly) == CANONICAL_SHAPE.get(graph)
+    sweep = GRAPH_SWEEP_SIZES.get(graph)
+    return sweep is not None and lx == ly and lx in sweep
 
 # arXiv 2504.21636 Table I, verbatim from the LaTeX source (main.tex, the
 # \begin{table*}...\end{table*} block labeled tab:lattice), for L=3..15.
@@ -243,7 +262,7 @@ def scored_with_cache_graph(name, encode_fn, order_fn, graph, sizes, file_fp, ca
     list of (lx, ly) pairs -- unlike the square-lattice challenge, mode
     count alone doesn't pin down the graph here (see harness.graphs.CANONICAL_SHAPE),
     so every shape a submission claims is scored and cached independently;
-    graph_ranked_entries/graph_other_shapes decide which of them is_showcased().
+    graph_sweep_entries/graph_other_shapes decide which of them is_showcased().
     Deliberately separate from scored_with_cache rather than a shared
     abstraction: that one is keyed by SIZES.index(l) (a fixed 3..15 column
     position, specific to the square-lattice table's layout), which doesn't
@@ -272,14 +291,6 @@ def scored_with_cache_graph(name, encode_fn, order_fn, graph, sizes, file_fp, ca
     return scores, any_recomputed
 
 
-# Stable column order for the graph challenge's consolidated tables --
-# GRAPH_LABELS is already insertion-ordered (hexagonal, triangular,
-# periodic_hexagonal, periodic_triangular); pulled out under its own name
-# so "column index for graph X" has one obvious definition every function
-# below shares, rather than each re-deriving list(GRAPH_LABELS).index(...).
-GRAPH_ORDER = list(GRAPH_LABELS)
-
-
 def compute_graph_entries():
     """{graph_type: [(name, submitted_at, label, link, {shape: {"total", "max"}}), ...]} --
     the graph-challenge analogue of compute_our_entries(), filtered to
@@ -291,7 +302,7 @@ def compute_graph_entries():
 
     Carries name/submitted_at (unlike compute_our_entries()'s total_entries/
     max_entries, which drop them) because every consumer here needs them:
-    graph_ranked_entries/graph_other_shapes don't, but graph_dated_totals
+    graph_sweep_entries/graph_other_shapes don't, but graph_dated_totals
     (the progress-chart data) does, and there's no reason to compute the
     same scores twice just to get a differently-shaped tuple.
     """
@@ -327,60 +338,66 @@ def _shape_of(key: str) -> tuple[int, int]:
     return lx, ly
 
 
-def graph_ranked_entries(by_graph, metric):
-    """[(label, link, {graph_column_index: value}), ...] for
-    render_ranked_table -- the graph-challenge analogue of
-    compute_our_entries()'s total_entries/max_entries, column-indexed by
-    lattice type (GRAPH_ORDER) instead of size. Only a shape that
-    is_showcased() for its graph type contributes -- exactly one column
-    value per (label, link) entry, since each only ever has one showcased
-    shape per graph type today, but the dict shape supports more without
-    a rendering change if that ever stops being true.
+def graph_sweep_entries(by_graph, graph, metric):
+    """[(label, link, {size_index: value}), ...] for render_ranked_table --
+    the graph-challenge analogue of compute_our_entries()'s total_entries/
+    max_entries, for ONE graph type's own Lx=Ly sweep (GRAPH_SWEEP_SIZES),
+    column-indexed by GRAPH_SWEEP_SIZES[graph].index(L) exactly like the
+    square-lattice table is indexed by SIZES.index(L). Only showcased
+    shapes contribute -- an entry with none (every shape it claims for
+    this graph type falls outside the sweep) is simply omitted, same
+    "size-scoped submission" handling render_ranked_table already does.
     """
+    sweep = GRAPH_SWEEP_SIZES[graph]
     entries = []
-    for graph, rows in by_graph.items():
-        col = GRAPH_ORDER.index(graph)
-        for name, submitted_at, label, link, scores in rows:
-            for key, s in scores.items():
-                if is_showcased(graph, *_shape_of(key)):
-                    entries.append((label, link, {col: s[metric]}))
+    for name, submitted_at, label, link, scores in by_graph.get(graph, []):
+        values = {}
+        for key, s in scores.items():
+            lx, ly = _shape_of(key)
+            if is_showcased(graph, lx, ly):
+                values[sweep.index(lx)] = s[metric]
+        if values:
+            entries.append((label, link, values))
     return entries
 
 
-def graph_paper_entries(metric):
-    """[(method, None, {graph_column_index: value}), ...] for
-    render_ranked_table -- arXiv 2504.21636 Table II's own JW/TT rows, one
-    row per method shared across all four graph-type columns (mirrors
-    paper_entries()'s shape for the square-lattice challenge's
-    PAPER_TOTAL/PAPER_MAX). Table II only reports total weight, not a
-    per-graph max -- see PAPER_TABLE2 -- so this returns [] for "max": no
-    paper reference row on that table, rather than a fabricated one.
+def graph_paper_entries(graph, metric):
+    """[(method, None, {size_index: value}), ...] for render_ranked_table --
+    arXiv 2504.21636 Table II's own JW/TT numbers for one graph type,
+    placed at the column matching that type's CANONICAL_SHAPE -- only if
+    that shape is itself an Lx=Ly point inside the type's own sweep. True
+    for triangular's (8, 8) (Lx=Ly, and 8 is within GRAPH_SWEEP_SIZES);
+    NOT true for hexagonal's (8, 4) (Lx != Ly, since hexagonal has two
+    sites per unit cell) -- there is no valid column for it in an
+    Lx=Ly-only sweep, so hexagonal gets no paper reference row here at
+    all, rather than a misplaced one. Table II only reports total weight,
+    not a per-graph max -- see PAPER_TABLE2 -- so this returns [] for
+    "max" regardless of graph.
     """
     if metric != "total":
         return []
-    methods = {}
-    for graph, weights in PAPER_TABLE2.items():
-        col = GRAPH_ORDER.index(graph)
-        for method, weight in weights.items():
-            methods.setdefault(method, {})[col] = weight
+    canon_lx, canon_ly = CANONICAL_SHAPE[graph]
+    if canon_lx != canon_ly or not is_showcased(graph, canon_lx, canon_ly):
+        return []
+    col = GRAPH_SWEEP_SIZES[graph].index(canon_lx)
     # Bare method name, no "[1]" suffix -- render_cell already appends
     # " [[1]](#references)" itself for any link=None entry (see
     # paper_entries()'s identical convention for the square-lattice
     # challenge); adding it here too would show up doubled.
-    return [(method, None, cols) for method, cols in methods.items()]
+    return [(method, None, {col: weight}) for method, weight in PAPER_TABLE2[graph].items()]
 
 
-def graph_column_labels():
-    return [f"{GRAPH_LABELS[g]} ({shape_key(*CANONICAL_SHAPE[g])})" for g in GRAPH_ORDER]
+def graph_sweep_column_labels(graph):
+    return [f"{l}×{l}" for l in GRAPH_SWEEP_SIZES[graph]]
 
 
 def graph_other_shapes(by_graph):
     """[(lattice_label, shape, name, total, max), ...] -- every claimed
-    shape that ISN'T its graph type's CANONICAL_SHAPE, across all four
-    lattice types in one flat list (the consolidated replacement for what
-    used to be a separate "Other shapes" sub-table per graph type). Sorted
-    by lattice label then total weight, so same-lattice rows stay grouped
-    without needing a sub-header per lattice.
+    shape that isn't showcased in its graph type's own sweep table, across
+    all graph types (including periodic_hexagonal/periodic_triangular,
+    which have no sweep at all and so land here entirely) in one flat
+    list. Sorted by lattice label then total weight, so same-lattice rows
+    stay grouped without needing a sub-header per lattice.
     """
     rows = []
     for graph, entries in by_graph.items():
@@ -395,15 +412,16 @@ def graph_other_shapes(by_graph):
 
 def render_other_graph_shapes(f, rows):
     """Omitted entirely (not even a header) if empty -- no submission has
-    claimed an off-canonical shape yet, so there's nothing to show.
+    claimed a non-showcased shape yet, so there's nothing to show.
     """
     if not rows:
         return
     f.write("## Other shapes\n\n")
     f.write(
-        "Claimed shapes that aren't a graph type's canonical comparison shape "
-        "-- still verified, scored, and cached, just not lined up against the "
-        "paper reference above.\n\n"
+        "Claimed shapes outside the sweep tables below -- an off-square "
+        "rectangle, an out-of-range size, or any shape at all for the "
+        "periodic variants (not swept yet) -- still verified, scored, and "
+        "cached, just not ranked above.\n\n"
     )
     f.write("| lattice | shape | label | total weight | max weight |\n")
     f.write("|---|---|---|---|---|\n")
@@ -413,53 +431,61 @@ def render_other_graph_shapes(f, rows):
 
 
 def graph_dated_totals(by_graph, graph):
-    """[(name, submitted_at, label, {0: total_weight}), ...] for one graph
-    type's CANONICAL_SHAPE entries, in scripts/progress_chart.py's
+    """[(name, submitted_at, label, {size_index: total_weight}), ...] for
+    one graph type's own Lx=Ly sweep, in scripts/progress_chart.py's
     dated_totals shape -- reused as-is by write_graph_progress_chart via
-    points_at_size(dated_totals, 0), same mechanism as the square-lattice
-    chart. Index 0 is the only "column" since a single-lattice chart only
-    ever plots one shape. Skips an entry with no submitted_at (shouldn't
-    happen -- process_inbox.py always stamps one -- but a manually
-    registered baseline could lack it, and a chart can't place an
-    undated point).
+    points_at_size(dated_totals, size_index), same mechanism as the
+    square-lattice chart. Skips an entry with no submitted_at (shouldn't
+    happen -- process_inbox.py and submit_baseline.py both always stamp
+    one -- but a chart can't place an undated point regardless).
     """
-    canon_key = shape_key(*CANONICAL_SHAPE[graph])
-    return [
-        (name, submitted_at, label, {0: scores[canon_key]["total"]})
-        for name, submitted_at, label, link, scores in by_graph.get(graph, [])
-        if submitted_at is not None and canon_key in scores
-    ]
+    sweep = GRAPH_SWEEP_SIZES[graph]
+    dated = []
+    for name, submitted_at, label, link, scores in by_graph.get(graph, []):
+        if submitted_at is None:
+            continue
+        values = {}
+        for key, s in scores.items():
+            lx, ly = _shape_of(key)
+            if is_showcased(graph, lx, ly):
+                values[sweep.index(lx)] = s["total"]
+        if values:
+            dated.append((name, submitted_at, label, values))
+    return dated
 
 
-def write_graph_progress_chart(dated_hex_totals) -> str:
-    """Writes assets/progress_hexagonal_weight.png and returns its
-    repo-relative path. Hex-Lattice only (not all four types): its
-    reference numbers are the largest of the four (thousands, vs. Tri-
-    Lattice's low thousands), which makes for a more legible y-axis than
-    cramming all four onto one chart or picking one with a narrower range.
-    Reference lines: our own live-computed JW score at hex's
-    CANONICAL_SHAPE (there's no registered "jw"-for-hexagonal baseline the
-    way the square chart has a plain "jw" to look up, so it's computed
-    directly here, same numbers score_with_cache_graph would cache if a
-    baseline did claim this shape) and the paper's own JW total. May well
-    render with no staircase yet (see docstring of compute_staircase) --
-    reference_lines still draw regardless of whether any points exist.
+def write_graph_progress_chart(dated_tri_totals) -> str:
+    """Writes assets/progress_triangular_weight.png and returns its
+    repo-relative path. Tri-Lattice only (not Hex-Lattice too): its own
+    paper-comparison shape, (8, 8), is Lx=Ly and so lands naturally inside
+    the Lx=Ly-only sweep this chart (and the tables) show -- unlike
+    Hex-Lattice's (8, 4), which doesn't (hexagonal has two sites per unit
+    cell, so its M=64 point is never a square Lx=Ly shape). Tri-Lattice is
+    the one graph type where "our own JW" and "the paper's own number" can
+    be placed at the same, real column -- exactly mirroring the
+    square-lattice chart's own JW-vs-Table-I comparison. Reference lines:
+    the registered "jw_triangular" baseline's own score at the target size
+    (mirrors write_progress_chart's "jw" lookup) and the better of Table
+    II's two triangular numbers (JW, TT).
     """
-    graph = "hexagonal"
-    lx, ly = CANONICAL_SHAPE[graph]
-    points = points_at_size(dated_hex_totals, 0)
+    graph = "triangular"
+    target_size = CANONICAL_SHAPE[graph][0]  # 8 -- the paper's own M=64 point, an Lx=Ly shape here
+    size_index = GRAPH_SWEEP_SIZES[graph].index(target_size)
+    points = points_at_size(dated_tri_totals, size_index)
 
-    jw_value, _ = evaluate_graph_baseline(jw_encode, None, graph, lx, ly)
-    paper_jw = PAPER_TABLE2[graph]["JW"]
+    jw_value = next(
+        (totals.get(size_index) for name, _, _, totals in dated_tri_totals if name == "jw_triangular"), None,
+    )
+    paper_best = min(PAPER_TABLE2[graph].values())
 
     assets_dir = REPO_ROOT / "assets"
     assets_dir.mkdir(exist_ok=True)
-    out_path = assets_dir / "progress_hexagonal_weight.png"
+    out_path = assets_dir / "progress_triangular_weight.png"
     render_progress_chart(
         points,
-        [("JW", jw_value), ("Table II JW [1]", paper_jw)],
+        [("JW", jw_value), ("Best of Table II [1]", paper_best)],
         out_path,
-        title=f"Total Pauli weight, Hex-Lattice ({shape_key(lx, ly)})",
+        title=f"Total Pauli weight, Tri-Lattice ({target_size}x{target_size})",
         ylabel="Total Pauli weight",
     )
     print(f"wrote {out_path}")
@@ -783,39 +809,48 @@ def write_graph_challenge_leaderboard():
     LEADERBOARD.md, _leaderboard_body.md, MEMORY.md, or
     assets/progress_total_weight.png.
 
-    One consolidated pair of ranked tables (total, max), columns = the
-    four lattice types, mirroring LEADERBOARD.md's own layout exactly --
-    row 1 is whoever wins at that lattice type, not a fixed encoding, same
-    tie-handling and same [1]-linked paper reference rows -- rather than
-    four separate one-table-per-graph-type sections. A claimed shape that
-    isn't its graph type's CANONICAL_SHAPE still gets verified, scored,
-    and cached, just folded into one shared "Other shapes" table below
-    instead of the headline comparison.
+    One pair of ranked tables (total, max) per swept graph type
+    (Tri-Lattice, Hex-Lattice -- periodic variants aren't swept, see
+    GRAPH_SWEEP_SIZES), columns = that type's own Lx=Ly sizes, mirroring
+    LEADERBOARD.md's own layout exactly (row 1 is whoever wins at that
+    size, not a fixed encoding, same tie-handling). Tri-Lattice's own
+    paper-comparison shape (8, 8) is Lx=Ly, so its tables carry a real
+    "[1]"-linked Table II reference column; Hex-Lattice's (8, 4) isn't
+    Lx=Ly, so its tables have no paper reference at all -- not a
+    misplaced one (see graph_paper_entries). A claimed shape outside its
+    graph type's sweep (an off-square rectangle, an out-of-range size, or
+    any periodic-type shape) still gets verified, scored, and cached,
+    just folded into one shared "Other shapes" table below instead of the
+    sweep tables.
     """
     by_graph = compute_graph_entries()
-    chart_path = write_graph_progress_chart(graph_dated_totals(by_graph, "hexagonal"))
+    chart_path = write_graph_progress_chart(graph_dated_totals(by_graph, "triangular"))
 
     graph_body = io.StringIO()
     graph_body.write(
-        f"![Total Pauli weight progress, Hex-Lattice]({chart_path})\n\n"
-        "Best total Pauli weight reached so far on the Hex-Lattice at its "
-        "canonical shape, plotted against submission date -- shown for "
-        "Hex-Lattice only since its reference numbers are the largest of "
-        "the four lattice types, giving the clearest y-axis. Dashed lines "
-        "are the JW reference and arXiv 2504.21636's own published Table "
-        "II JW row. See the full tables below for the complete picture "
-        "across all four lattice types.\n\n"
+        f"![Total Pauli weight progress, Tri-Lattice]({chart_path})\n\n"
+        "Best total Pauli weight reached so far on the Tri-Lattice at "
+        "8x8 (arXiv 2504.21636's own Table II comparison point), plotted "
+        "against submission date -- shown for Tri-Lattice only since it's "
+        "the one graph type whose paper-comparison shape is itself Lx=Ly "
+        "(Hex-Lattice's is not -- see NOTES.md). Dashed lines are the JW "
+        "reference and the better of Table II's own two Tri-Lattice "
+        "numbers (JW, TT). See the full tables below for the complete "
+        "picture across both graph types and every swept size.\n\n"
     )
-    render_ranked_table(
-        graph_body, "Total Pauli weight", "D = Num + ReHop + ImHop + Inter",
-        graph_ranked_entries(by_graph, "total") + graph_paper_entries("total"),
-        column_labels=graph_column_labels(),
-    )
-    render_ranked_table(
-        graph_body, "Maximum Pauli weight", "D = max(Num, ReHop, ImHop, Inter)",
-        graph_ranked_entries(by_graph, "max") + graph_paper_entries("max"),
-        column_labels=graph_column_labels(),
-    )
+    for graph in ("triangular", "hexagonal"):
+        label = GRAPH_LABELS[graph]
+        column_labels = graph_sweep_column_labels(graph)
+        render_ranked_table(
+            graph_body, f"{label} — Total Pauli weight", "D = Num + ReHop + ImHop + Inter",
+            graph_sweep_entries(by_graph, graph, "total") + graph_paper_entries(graph, "total"),
+            column_labels=column_labels,
+        )
+        render_ranked_table(
+            graph_body, f"{label} — Maximum Pauli weight", "D = max(Num, ReHop, ImHop, Inter)",
+            graph_sweep_entries(by_graph, graph, "max") + graph_paper_entries(graph, "max"),
+            column_labels=column_labels,
+        )
     render_other_graph_shapes(graph_body, graph_other_shapes(by_graph))
     graph_body.write(
         "## References\n\n"
@@ -831,33 +866,43 @@ def write_graph_challenge_leaderboard():
         f.write(
             "Generated by `scripts/update_leaderboard.py` — **do not hand-edit this "
             "file**. A separate challenge from the square-lattice one in "
-            "`LEADERBOARD.md`: the target graphs are the 2D lattice types from arXiv "
-            "2504.21636's Table II (hexagonal, triangular, and their periodic "
-            "variants, not square grids), scored under the exact same "
+            "`LEADERBOARD.md`: the target graphs are 2D lattice types from arXiv "
+            "2504.21636's Table II (Tri-Lattice/triangular and Hex-Lattice/"
+            "hexagonal, not square grids), scored under the exact same "
             "`D = Num + ReHop + ImHop + Inter` metric as the square-lattice "
             "challenge. Same layout as `LEADERBOARD.md` too: rows are rank "
-            "positions, not fixed encodings, and columns are the four lattice "
-            "types (at each one's canonical shape, named in the header) instead "
-            "of lattice sizes. Same non-negotiable rule as the square-lattice "
-            "challenge: the harness does not search orderings on a submission's "
-            "behalf; each graph type ships one canonical default ordering (see "
-            "`harness/graphs.py`), overridable by a submission's own declared "
-            "`order(Lx, Ly) -> perm` exactly as today.\n\n"
+            "positions, not fixed encodings, and columns are lattice sizes "
+            "`Lx = Ly` (a submission may claim other shapes too -- see "
+            "\"Other shapes\" below) -- swept 3x3..15x15 for Tri-Lattice and "
+            "3x3..10x10 for Hex-Lattice (`GRAPH_SWEEP_SIZES` in "
+            "`scripts/update_leaderboard.py`; Hex-Lattice has two sites per unit "
+            "cell, so its mode count grows twice as fast, hence the shorter sweep "
+            "-- 10x10 there is 200 qubits, about the same as Tri-Lattice's 15x15 "
+            "at 225). Periodic Hex-Lattice and Periodic Tri-Lattice are valid "
+            "targets too (`\"graph\": \"periodic_hexagonal\"/\"periodic_triangular\"` "
+            "in `submission.json`) but aren't swept/shown in a table yet -- any "
+            "shape claimed for them is still verified, scored, and cached, and "
+            "shows up in \"Other shapes\" below. Same non-negotiable rule as the "
+            "square-lattice challenge: the harness does not search orderings on a "
+            "submission's behalf; each graph type ships one canonical default "
+            "ordering (see `harness/graphs.py`), overridable by a submission's own "
+            "declared `order(Lx, Ly) -> perm` exactly as today.\n\n"
             "A submission declares which shape(s) it targets as explicit `Lx x Ly` "
-            "pairs (e.g. `\"sizes\": \"8x4,15x15\"` in `submission.json` -- see "
+            "pairs (e.g. `\"sizes\": \"8x8,15x15\"` in `submission.json` -- see "
             "`inbox/README.md`), not a single size: for these lattice types, mode "
             "count `M` alone does **not** determine the graph -- different `(Lx, "
-            "Ly)` splits at the same `M` are structurally different graphs (see "
-            "`harness/graphs.py`'s `CANONICAL_SHAPE`). Each graph type has exactly "
-            "one shape pinned as directly comparable to the paper's own numbers "
-            "(shown in the table columns below); a submission at any other "
-            "shape still gets verified, scored, and cached, and shows up in the "
-            "\"Other shapes\" table, just not against `[1]`. `[1]` rows are "
-            "arXiv 2504.21636's own published Table II -- our own construction of "
-            "the canonical shape won't reproduce those numbers exactly (the paper "
-            "doesn't state the exact shape it used), only land in the same "
-            "ballpark; see NOTES.md.\n\n"
-            "Lower is better, on both tables.\n\n"
+            "Ly)` splits at the same `M` are structurally different graphs. `[1]` "
+            "rows are arXiv 2504.21636's own published Table II, shown at "
+            "Tri-Lattice's 8x8 column (its own paper-comparison shape, which "
+            "happens to be `Lx = Ly`); Hex-Lattice's paper-comparison shape is "
+            "`(8, 4)`, not `Lx = Ly`, so it has no column in these Lx=Ly-only "
+            "sweep tables and gets no `[1]` row here -- our own `jw_hexagonal`/"
+            "`tt_hexagonal` baselines are still real, ranked entries, just without "
+            "a paper number to line up against. Our own construction of any "
+            "canonical shape won't reproduce the paper's numbers exactly (the "
+            "paper doesn't state the exact shape/ordering it used), only land in "
+            "the same ballpark; see NOTES.md.\n\n"
+            "Lower is better, on every table.\n\n"
         )
         f.write(graph_body_text)
     print(f"wrote {graphs_path}")

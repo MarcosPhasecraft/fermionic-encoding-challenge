@@ -39,10 +39,10 @@ Graph challenge (non-square lattices -- note `sizes`' different grammar, and the
 
 ```json
 {
-  "name": "alice_hex_variant",
-  "label": "Alice's Hex-Lattice Variant",
-  "sizes": "8x4,15x15",
-  "graph": "hexagonal",
+  "name": "alice_tri_variant",
+  "label": "Alice's Tri-Lattice Variant",
+  "sizes": "3x3,4x4,5x5,6x6,7x7,8x8,9x9,10x10,11x11,12x12,13x13,14x14,15x15",
+  "graph": "triangular",
   "generated_by": "Claude Opus 4.5"
 }
 ```
@@ -90,35 +90,42 @@ Graph challenge (non-square lattices -- note `sizes`' different grammar, and the
   challenge — only the graphs differ, not the metric.
 
   **How `LEADERBOARD_GRAPHS.md` is laid out.** Same shape as
-  `LEADERBOARD.md`: two rank-based tables (total weight, max weight), row
-  1 is whoever wins, not a fixed encoding. The only difference is what the
-  columns are — `LEADERBOARD.md`'s columns are lattice *sizes* (`3x3` ..
-  `15x15`); `LEADERBOARD_GRAPHS.md`'s columns are the four lattice
-  *types* (Hex-Lattice, Tri-Lattice, Periodic Hex-Lattice, Periodic
-  Tri-Lattice), each labeled with its `CANONICAL_SHAPE`. There's also a
-  progress-over-time chart at the top, like `LEADERBOARD.md`'s, but for
-  Hex-Lattice only (its reference numbers are the largest of the four,
-  giving the clearest y-axis).
+  `LEADERBOARD.md`, per graph type: a pair of rank-based tables (total
+  weight, max weight), row 1 is whoever wins, not a fixed encoding,
+  columns are `Lx = Ly` sizes exactly like `LEADERBOARD.md`'s own —
+  swept `3x3..15x15` for `triangular` and `3x3..10x10` for `hexagonal`
+  (hexagonal has two sites per unit cell, so its mode count grows twice
+  as fast for the same `L`, hence the shorter sweep). `periodic_hexagonal`/
+  `periodic_triangular` are valid `"graph"` values and get fully
+  verified/scored/cached, but aren't swept/shown in a table yet. There's
+  also a progress-over-time chart at the top, like `LEADERBOARD.md`'s,
+  but for Tri-Lattice only at `8x8` — see below for why.
 
-  **Which shapes/sizes actually get shown on a leaderboard.** A submission
-  can claim any valid shape for its challenge, but only some are rendered:
-  for `graph="square"`, exactly the integer sizes `3..15` (`Lx = Ly`,
-  arXiv 2504.21636 Table I's own sweep) show up in `LEADERBOARD.md`; an
-  off-square rectangle or an out-of-range size is still verified, scored,
-  and cached, just not shown anywhere yet. For every other graph type,
-  exactly one `(Lx, Ly)` pinned as that type's `CANONICAL_SHAPE`
-  (`harness/graphs.py`) shows up in `LEADERBOARD_GRAPHS.md`'s two ranked
-  tables, next to the paper's own published numbers — gated on the
-  *exact* shape, not just matching `M`, since (as above) comparing by `M`
-  alone would let a submission pick whichever aspect ratio is easiest to
-  encode well while still nominally "matching" the paper. A submission at
-  any other shape for that graph type is still scored and shown, in a
-  separate "Other shapes" table below the two ranked ones, just not lined
-  up against `[1]`. This decision lives in one place, `is_showcased()` in
+  **Which shapes/sizes actually get shown.** A submission can claim any
+  valid shape for its challenge, but only some are rendered: for
+  `graph="square"`, exactly the integer sizes `3..15` (`Lx = Ly`, arXiv
+  2504.21636 Table I's own sweep); for `triangular`/`hexagonal`, exactly
+  the `Lx = Ly` sizes within that type's own sweep range above. Anything
+  else — an off-square rectangle, an out-of-range size, or any shape at
+  all for the periodic variants — is still verified, scored, and cached,
+  just shown (for the graph challenge) in a separate "Other shapes" table
+  instead of a ranked one, or (for the square challenge) not shown
+  anywhere yet. This decision lives in one place, `is_showcased()` in
   `scripts/update_leaderboard.py`, so it can gain new showcased
-  shapes/sizes later without a rendering rewrite. Include the showcased
-  shape/size in your `sizes` string if you want your submission to appear
-  in the headline comparison.
+  shapes/sizes/graph types later without a rendering rewrite.
+
+  **Only Tri-Lattice's tables carry a `[1]`-linked Table II reference
+  row.** Table II's own comparison shape for triangular, `(8, 8)`, is
+  `Lx = Ly` (triangular's mode count `M = Lx·Ly` matches the square
+  lattice's own formula), so it lands exactly on Tri-Lattice's `L=8`
+  column. Hexagonal's comparison shape, `(8, 4)`, is *not* `Lx = Ly`
+  (hexagonal has two sites per unit cell, so `M = 2·Lx·Ly` needs `Lx !=
+  Ly` to hit the paper's `M=64`) — it has no column in an `Lx = Ly`-only
+  sweep, so Hex-Lattice's tables have no paper reference row at all. Its
+  own `jw`/`tt` reference entries are still real, ranked rows, just
+  without a paper number to line up against. Include `8x8` in your
+  `sizes` string for a `triangular` submission if you want to compete
+  directly against `[1]`.
 
 The acceptance date is *not* a field you provide — `process_inbox.py`
 stamps it itself, from its own clock, the moment a submission actually

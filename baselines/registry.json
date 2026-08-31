@@ -343,5 +343,205 @@
     "label": "Geo Ternary (deep Clifford refinement)",
     "generated_by": "Claude Opus 5",
     "submitted_at": "2026-08-30T06:31:06+00:00"
+  },
+  "jw_triangular": {
+    "module": "baselines.jw_triangular",
+    "sizes": [
+      [
+        3,
+        3
+      ],
+      [
+        4,
+        4
+      ],
+      [
+        5,
+        5
+      ],
+      [
+        6,
+        6
+      ],
+      [
+        7,
+        7
+      ],
+      [
+        8,
+        8
+      ],
+      [
+        9,
+        9
+      ],
+      [
+        10,
+        10
+      ],
+      [
+        11,
+        11
+      ],
+      [
+        12,
+        12
+      ],
+      [
+        13,
+        13
+      ],
+      [
+        14,
+        14
+      ],
+      [
+        15,
+        15
+      ]
+    ],
+    "label": "JW",
+    "submitted_at": "2026-08-31T05:53:19+00:00",
+    "graph": "triangular"
+  },
+  "tt_triangular": {
+    "module": "baselines.tt_triangular",
+    "sizes": [
+      [
+        3,
+        3
+      ],
+      [
+        4,
+        4
+      ],
+      [
+        5,
+        5
+      ],
+      [
+        6,
+        6
+      ],
+      [
+        7,
+        7
+      ],
+      [
+        8,
+        8
+      ],
+      [
+        9,
+        9
+      ],
+      [
+        10,
+        10
+      ],
+      [
+        11,
+        11
+      ],
+      [
+        12,
+        12
+      ],
+      [
+        13,
+        13
+      ],
+      [
+        14,
+        14
+      ],
+      [
+        15,
+        15
+      ]
+    ],
+    "label": "TT",
+    "submitted_at": "2026-08-31T05:53:28+00:00",
+    "graph": "triangular"
+  },
+  "jw_hexagonal": {
+    "module": "baselines.jw_hexagonal",
+    "sizes": [
+      [
+        3,
+        3
+      ],
+      [
+        4,
+        4
+      ],
+      [
+        5,
+        5
+      ],
+      [
+        6,
+        6
+      ],
+      [
+        7,
+        7
+      ],
+      [
+        8,
+        8
+      ],
+      [
+        9,
+        9
+      ],
+      [
+        10,
+        10
+      ]
+    ],
+    "label": "JW",
+    "submitted_at": "2026-08-31T05:53:29+00:00",
+    "graph": "hexagonal"
+  },
+  "tt_hexagonal": {
+    "module": "baselines.tt_hexagonal",
+    "sizes": [
+      [
+        3,
+        3
+      ],
+      [
+        4,
+        4
+      ],
+      [
+        5,
+        5
+      ],
+      [
+        6,
+        6
+      ],
+      [
+        7,
+        7
+      ],
+      [
+        8,
+        8
+      ],
+      [
+        9,
+        9
+      ],
+      [
+        10,
+        10
+      ]
+    ],
+    "label": "TT",
+    "submitted_at": "2026-08-31T05:53:29+00:00",
+    "graph": "hexagonal"
   }
 }

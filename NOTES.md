@@ -518,28 +518,74 @@ rule also now governs the square-lattice challenge's own table (see
 below), so both challenges share one mechanism for "scored and cached
 always, shown only if showcased."
 
-**Later redesign (still the current layout):** `LEADERBOARD_GRAPHS.md`
+**Redesign history, briefly (each superseded the last -- this is not the
+current layout, see the next paragraph for that):** `LEADERBOARD_GRAPHS.md`
 originally rendered one small table per graph type (four separate
 sections, each with its own "vs. Table II"/"Other shapes" sub-tables).
-Consolidated into the same shape as `LEADERBOARD.md` itself: one pair of
-rank-based tables (total, max) with the four lattice types as *columns*
-(`graph_ranked_entries`/`graph_paper_entries`/`graph_column_labels` in
-`scripts/update_leaderboard.py`, feeding the same `render_ranked_table`
-the square-lattice challenge uses, generalized to take `column_labels`),
-plus one shared "Other shapes" table (`graph_other_shapes`) instead of
-four. Also added a progress-over-time chart (`write_graph_progress_chart`,
-`assets/progress_hexagonal_weight.png`) mirroring `LEADERBOARD.md`'s own
--- Hex-Lattice only, since its reference numbers are the largest of the
-four and give the clearest y-axis. With zero graph-challenge submissions
-registered, that chart's "record" line is empty; `render_progress_chart`
-(`scripts/progress_chart.py`) needed a real fix for this, not just an
-edge case to shrug off: matplotlib's date-axis autoscale with literally no
-points on it produced a nonsensical, backwards-reading tick range (found
-by actually rendering and looking at the PNG, not just eyeballing the
-code) -- fixed by skipping the date-locator/formatter entirely and
-showing a plain "No submissions yet" placeholder axis when `points` is
-empty, leaving the two reference lines (which still draw regardless of
-`points`) as the only real content until a submission lands.
+First consolidated into one pair of rank-based tables with the four
+lattice types as *columns* (mirroring `LEADERBOARD.md`'s shape, but
+columns = graph type instead of size). That in turn was replaced by the
+sweep-based design below, once it became clear a size *sweep* per lattice
+type (not a single canonical-shape column) was wanted, matching
+`LEADERBOARD.md` far more closely.
+
+**Current layout: one pair of ranked tables (total, max) per swept graph
+type** (Tri-Lattice 3x3..15x15, Hex-Lattice 3x3..10x10 --
+`GRAPH_SWEEP_SIZES` in `scripts/update_leaderboard.py`; hexagonal has two
+sites per unit cell so its mode count grows twice as fast, hence the
+shorter sweep, chosen so hexagonal's top qubit count, 200, lands near
+triangular's, 225), columns = that type's own `Lx = Ly` sizes, built via
+`graph_sweep_entries`/`graph_paper_entries`/`graph_sweep_column_labels`
+feeding the same `render_ranked_table` the square-lattice challenge uses.
+Periodic Hex-Lattice/Periodic Tri-Lattice have no sweep defined -- not
+shown in a table, though still fully submittable/scored/cached, same as
+any other `is_showcased()`-excluded shape; any shape claimed for them
+lands in the shared "Other shapes" table (`graph_other_shapes`) alongside
+off-square/out-of-range shapes for the two swept types.
+
+Because Hex-Lattice has two sites per unit cell (`M = 2*Lx*Ly`), its own
+paper-comparison shape `(8, 4)` is never `Lx = Ly` -- it has no column in
+an `Lx = Ly`-only sweep. Tri-Lattice's `(8, 8)` (`M = Lx*Ly`, same
+formula as the square lattice) *is* `Lx = Ly`, and lands exactly at
+column `L=8`. So: Tri-Lattice's tables get a real `[1]`-linked Table II
+reference row; Hex-Lattice's don't (`graph_paper_entries` returns `[]`
+when the canonical shape isn't `Lx = Ly` or falls outside the sweep --
+not a fabricated placement). This is also why the progress-over-time
+chart (`write_graph_progress_chart`, `assets/progress_triangular_weight.png`)
+is Tri-Lattice only, at `target_size=8`: it's the one graph type where
+"our own JW" and "the paper's own number" sit at the same, real column,
+mirroring the square-lattice chart's own JW-vs-Table-I comparison
+exactly. Reference baselines `jw_triangular`/`tt_triangular`/
+`jw_hexagonal`/`tt_hexagonal` (thin `from baselines.jw/ternary import
+encode` re-exports, registered via `scripts/submit_baseline.py` --
+deliberately *not* hand-edited into `registry.json`, per this project's
+own rule) give each sweep table real, ranked content from the start,
+exactly like `jw`/`parity`/`bk`/`ternary` already do for the square
+challenge -- no custom `order()`: `harness.graphs.build_spec` falls back
+to each lattice type's own canonical default when none is declared,
+which is `jw.py`/`ternary.py`'s own square-specific `order()` would in
+fact be the *wrong length* for hexagonal (`M = 2*Lx*Ly`, not `Lx*Ly`) if
+imported directly -- see `baselines/jw_hexagonal.py`'s docstring.
+
+Two real bugs found and fixed while building this (both by actually
+rendering the chart and looking at the PNG, not just eyeballing the
+code): (1) `scripts/submit_baseline.py` never stamped a `submitted_at`
+timestamp (unlike `scripts/process_inbox.py`), so the four reference
+baselines above initially had `submitted_at: None` and silently vanished
+from the chart's reference-line lookup (`graph_dated_totals` correctly
+skips undated entries -- a chart can't place one -- but that meant the
+red "JW" line just never appeared, no error, nothing to notice unless you
+looked at the actual image). Fixed by stamping `submitted_at` in
+`submit_baseline.py` too, then re-registering with `--force`. (2)
+`render_progress_chart` (`scripts/progress_chart.py`) rendered a
+nonsensical, backwards-reading date axis when `points` was empty (no
+registered graph-challenge baseline yet) -- matplotlib's date-axis
+autoscale has no real domain to anchor to with nothing plotted on it.
+Fixed by skipping the date-locator/formatter entirely and showing a plain
+"No submissions yet" placeholder axis (centered vertically, to avoid
+landing on top of whichever reference line happens to sit near the
+middle of the y-range) when `points` is empty, leaving the reference
+lines (which draw regardless of `points`) as the only real content.
 
 ## Rectangular submissions for the square-lattice challenge
 

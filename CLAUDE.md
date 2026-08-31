@@ -137,24 +137,56 @@ structurally different graphs (different edge counts/boundary structure).
 cached — whether or not it ever appears in a rendered table.** What's
 *shown* is decided by exactly one function, `is_showcased(graph, lx, ly)`
 in `scripts/update_leaderboard.py`: for `"square"`, an exact `Lx == Ly`
-within the leaderboard's `SIZES` range (today's 3x3..15x15, arXiv
-2504.21636 Table I); for every other graph type, an exact match to that
-type's `CANONICAL_SHAPE` (`harness/graphs.py`, arXiv 2504.21636 Table II's
-64-mode instances). Gated on the *exact* shape, not on matching `M`, for
-the graph types: gating on `M` alone would let a submission pick whichever
-aspect ratio is easiest to encode well while still nominally "matching"
-the paper at the same mode count. A submission at any other shape/size
+within `SIZES` (3x3..15x15, arXiv 2504.21636 Table I's own sweep); for
+`"triangular"`/`"hexagonal"`, an exact `Lx == Ly` within that graph
+type's own `GRAPH_SWEEP_SIZES` entry (triangular 3..15, hexagonal 3..10 —
+hexagonal has two sites per unit cell, so its mode count `M = 2·Lx·Ly`
+grows twice as fast as triangular's `M = Lx·Ly`, hence the shorter sweep,
+chosen so hexagonal's top qubit count lands near triangular's); for
+`"periodic_hexagonal"`/`"periodic_triangular"`, always `False` — no sweep
+defined for them yet. A submission at any non-showcased shape/size (an
+off-square rectangle, an out-of-range size, or any periodic-type shape)
 still gets scored and cached, and (on the graph-challenge side) shown in
-a separate "Other shapes" table below the ranked ones — just never lined
-up against `[1]`, and (on the square-lattice side) not shown anywhere
-yet. This is the single place to touch when showcasing a new shape later
-(a wider square range, a second canonical hex shape, a new graph type) —
-not a rendering rewrite.
+a separate "Other shapes" table — just never ranked in a sweep table —
+and (on the square-lattice side) not shown anywhere yet. This is the
+single place to touch when showcasing a new shape/size/graph type later
+— not a rendering rewrite.
+
+**Only Tri-Lattice's sweep table carries a real Table II reference row —
+Hex-Lattice's doesn't, and that's correct, not a bug.** Table II's own
+comparison point for each type is `CANONICAL_SHAPE` (`harness/graphs.py`):
+triangular's `(8, 8)` is `Lx = Ly` (same mode-count formula as the square
+lattice), so it lands exactly on column `L=8` of an `Lx = Ly`-only sweep.
+Hexagonal's `(8, 4)` is *not* `Lx = Ly` (two sites per unit cell forces
+`Lx != Ly` to hit `M=64`), so it has no column at all in that sweep —
+`graph_paper_entries` returns `[]` for hexagonal rather than placing the
+number somewhere misleading. `jw_hexagonal`/`tt_hexagonal` still appear
+as real, ranked entries; they just have no `[1]` row to line up against.
+This is also why the progress-over-time chart
+(`write_graph_progress_chart`) is Tri-Lattice only, at `target_size=8`.
 
 `LEADERBOARD_GRAPHS.md` mirrors `LEADERBOARD.md`'s own layout (rank-based
-rows, `render_ranked_table`), just with columns = the four lattice types
-(at each one's `CANONICAL_SHAPE`) instead of columns = lattice sizes —
-one shared function, not a second table-rendering implementation.
+rows, `render_ranked_table`) per swept graph type — one pair of tables
+(total, max) for Tri-Lattice, another for Hex-Lattice — columns = that
+type's own `Lx = Ly` sweep, exactly like the square-lattice table's
+columns are sizes. One shared rendering function, not a second
+implementation, and not the four-lattice-types-as-columns layout an
+earlier iteration used (see NOTES.md if you're looking at old context
+that mentions that).
+
+**Reference baselines for the graph challenge** (`jw_triangular`,
+`tt_triangular`, `jw_hexagonal`, `tt_hexagonal`) are thin
+`from baselines.jw/ternary import encode` re-exports — same pattern as
+`bk_snake.py` etc. reusing another module's `encode()` — registered via
+`scripts/submit_baseline.py`, never hand-edited into `registry.json`.
+Deliberately declare **no** `order()`: `jw.py`/`ternary.py`'s own
+`order()` returns a permutation sized for `M = Lx·Ly` (the square-lattice
+convention, which triangular happens to share) — importing it for a
+*hexagonal* wrapper would raise a mismatched-length error, since
+hexagonal's `M = 2·Lx·Ly`. Leaving `order()` undeclared lets
+`harness.graphs.build_spec` fall back to each lattice type's own
+canonical default, which is what "the canonical ordering, whatever is
+most natural for the lattice" means here.
 
 ## Conventions
 
