@@ -1,0 +1,34 @@
+[
+  {
+    "name": "square_full_w3",
+    "type": "min_ancillas_at_weight",
+    "graph": "square",
+    "model": "full",
+    "max_weight": 3,
+    "sizes": [
+      "3x3",
+      "4x4",
+      "5x5",
+      "6x6",
+      "7x7",
+      "8x8",
+      "9x9",
+      "10x10",
+      "11x11",
+      "12x12",
+      "13x13",
+      "14x14",
+      "15x15"
+    ],
+    "description": "Minimize ancillas on the square lattice (3x3..15x15, matching LEADERBOARD.md's own sweep) subject to a max Pauli weight of 3 -- the locality DK-type constructions are built to hit."
+  },
+  {
+    "name": "square_6x6_a4",
+    "type": "min_weight_at_ancillas",
+    "graph": "square",
+    "model": "full",
+    "shape": "6x6",
+    "max_ancillas": 4,
+    "description": "Minimize (max_weight, total_weight) as a Pareto pair on a single fixed 6x6 square-lattice instance, given a budget of at most 4 ancilla qubits."
+  }
+]
