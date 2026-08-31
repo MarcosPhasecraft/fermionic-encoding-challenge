@@ -416,6 +416,28 @@ def test_render_ranked_table_empty_entries_shows_nothing_here_yet():
     assert "| rank |" not in content
 
 
+# --- _rebase_links_for_graphs_page ---
+
+
+def test_rebase_links_for_graphs_page_rewrites_baseline_links():
+    text = "**42**<br>[JW](baselines/jw_triangular.py)"
+    assert update_leaderboard._rebase_links_for_graphs_page(text) == \
+        "**42**<br>[JW](../baselines/jw_triangular.py)"
+
+
+def test_rebase_links_for_graphs_page_rewrites_chart_embed():
+    text = "![Total Pauli weight progress, Tri-Lattice](assets/progress_triangular_weight.png?v=abc123)"
+    assert update_leaderboard._rebase_links_for_graphs_page(text) == \
+        "![Total Pauli weight progress, Tri-Lattice](../assets/progress_triangular_weight.png?v=abc123)"
+
+
+def test_rebase_links_for_graphs_page_leaves_other_links_alone():
+    # A same-page anchor and an absolute external URL should pass through
+    # unchanged -- only the two repo-root-relative link kinds get rewritten.
+    text = "JW [[1]](#references)\n[1] ... [arXiv 2504.21636](https://arxiv.org/abs/2504.21636)"
+    assert update_leaderboard._rebase_links_for_graphs_page(text) == text
+
+
 # --- is_showcased ---
 
 

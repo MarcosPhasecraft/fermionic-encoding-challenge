@@ -800,6 +800,27 @@ def main():
     write_graph_challenge_leaderboard()
 
 
+def _rebase_links_for_graphs_page(text: str) -> str:
+    """graph_body_text's own baselines/*.py links and assets/*.png chart
+    embed are repo-root-relative (correct for LEADERBOARD_GRAPHS.md, a
+    file sitting at the repo root right next to those directories) --
+    but _graph_leaderboard_body.md is included into graphs.md, which
+    GitHub Pages serves one path segment deeper, at /graphs/, not at the
+    site root. The exact same relative link that's correct from the repo
+    root resolves one level too deep from there (confirmed against the
+    live site: baselines/jw_triangular.py and assets/progress_*.png both
+    404'd on the /graphs/ page while working fine from LEADERBOARD_GRAPHS.md
+    and from the site's own root page, index.md -- the square-lattice
+    challenge never hits this because both of ITS consumers, LEADERBOARD.md
+    and index.md, sit at the same depth). Only these two link kinds ever
+    appear with this prefix in generated graph-challenge content --
+    render_cell's [label](link) from source_link(), and the chart's
+    ![alt](chart_path) -- so a plain string substitution is exact, not a
+    heuristic.
+    """
+    return text.replace("](baselines/", "](../baselines/").replace("](assets/", "](../assets/")
+
+
 def write_graph_challenge_leaderboard():
     """Writes LEADERBOARD_GRAPHS.md (and _graph_leaderboard_body.md, the
     Pages-site fragment) -- the beyond-square-lattices challenge, entirely
@@ -908,7 +929,7 @@ def write_graph_challenge_leaderboard():
     print(f"wrote {graphs_path}")
 
     graph_body_path = REPO_ROOT / "_graph_leaderboard_body.md"
-    graph_body_path.write_text(graph_body_text)
+    graph_body_path.write_text(_rebase_links_for_graphs_page(graph_body_text))
     print(f"wrote {graph_body_path}")
 
 
