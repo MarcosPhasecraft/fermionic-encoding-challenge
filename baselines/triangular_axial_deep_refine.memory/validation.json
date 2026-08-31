@@ -1,0 +1,14 @@
+{
+  "graph": "triangular",
+  "model": "full",
+  "results": [
+    {"L": 3, "passed": true, "total_weight": 257, "max_weight": 4, "seconds": 152.44789912493434},
+    {"L": 4, "passed": true, "total_weight": 586, "max_weight": 6, "seconds": 191.9175048749894},
+    {"L": 5, "passed": true, "total_weight": 1059, "max_weight": 8, "seconds": 211.15559508407023},
+    {"L": 6, "passed": true, "total_weight": 1730, "max_weight": 10, "seconds": 290.8146401250269},
+    {"L": 7, "passed": true, "total_weight": 2572, "max_weight": 9, "seconds": 404.28232395800296},
+    {"L": 8, "passed": true, "total_weight": 3569, "max_weight": 11, "seconds": 663.172480624984}
+  ],
+  "verifier": "harness.evaluate.evaluate (verify before score)",
+  "note": "The 8x8 score beats executable local baselines but not the paper reference 2384."
+}
