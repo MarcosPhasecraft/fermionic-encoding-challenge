@@ -9,7 +9,7 @@ after confirming a submission actually passes at every size it claims.
 BASELINES[name] = {"encode": encode_fn, "order": order_fn_or_None,
                     "sizes": [int, ...], "module": "baselines.name",
                     "label": "display name", "submitted_at": str_or_None,
-                    "generated_by": str_or_None}
+                    "generated_by": str_or_None, "graph": "square" or other}
 
 "order" is the module's own optional order(Lx, Ly) -> perm (None if it
 declares none, in which case harness.lattice.build_spec falls back to
@@ -26,6 +26,11 @@ taken from the submission itself) and an optional free-text
 model/author note; both None for entries that predate the pipeline or
 came in through scripts/submit_baseline.py's manual path instead.
 Neither is ever rendered on the leaderboard -- see scripts/submission_lib.py.
+"graph" defaults to "square" for every entry that predates the
+ancilla/graph-challenge phase (and for anything that doesn't set it) --
+see scripts/update_leaderboard.py's compute_our_entries(), which filters
+on this to keep the square-lattice leaderboard and progress chart
+structurally unable to see a non-square entry.
 """
 
 import importlib
@@ -49,6 +54,7 @@ def _load_registry() -> dict:
             "label": entry.get("label", name),
             "submitted_at": entry.get("submitted_at"),
             "generated_by": entry.get("generated_by"),
+            "graph": entry.get("graph", "square"),
         }
     return registry
 

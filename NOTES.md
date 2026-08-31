@@ -418,3 +418,120 @@ prior preference — see the earlier `generated_by` note): a separate
 generated `MEMORY.md`, written by `scripts/update_leaderboard.py`
 alongside the score tables, listing only baselines that actually have a
 `.memory/` folder — nothing for the rest, no "no notes" filler rows.
+
+## Table III was investigated and abandoned; the graph challenge targets Table II instead
+
+An earlier design of the graph challenge targeted arXiv 2504.21636's
+**Table III** (`\label{tab:stab}`, ancillas allowed, `D = ReHop + ImHop`
+only, a "JW + 10 ancillas" reference row). Investigating whether
+`harness/verify.py` correctly checks stabilizers (it doesn't implement
+checks 2-4 at all -- see below) turned up something more fundamental:
+Table III's own numbers come from a construction (`sec:constantancillas`
+in their LaTeX source) that multiplies individual Hamiltonian *terms* by a
+per-edge-independently-chosen factor ("Option 1" vs "Option 2", picked per
+edge to minimize weight) -- this is not expressible as one fixed Majorana
+generator per mode, which is what `mapping["majoranas"]` requires. No
+submission, however good, could ever reach parity with those numbers in
+our current submission format. Went as far as scoping a genuinely
+stabilizer-based redesign (targeting Derby-Klassen arXiv 2003.06939 and
+Verstraete-Cirac J. Stat. Mech. 2005 P09012 instead, which do use real
+stabilizer codes) before deciding it added too much complexity for now.
+Decision: drop ancillas from this challenge entirely, and target Table II
+instead, which needs no schema change at all.
+
+Also confirmed while investigating: `harness/verify.py` only implements
+checks 0 (well-formed) and 1 (Majorana algebra) -- checks 2-4 (stabilizers
+abelian / compatible / codespace dimension), fully specified in `PLAN.md`
+§1.5 since Stage 1, were never written (deferred back then because nothing
+used ancillas yet). `mapping["stabilizers"]` is hard-coded `[]` everywhere
+in the repo. This remains true and unexercised -- nothing in the graph
+challenge (ancilla-free, as of this decision) needs it.
+
+## Table II verification (graph challenge)
+
+arXiv 2504.21636's **Table II** (`\label{tab:graphs}` in the LaTeX source)
+is the reference for `LEADERBOARD_GRAPHS.md`. Verified directly against
+the LaTeX (not paraphrased): caption is "Total Pauli weight
+$(\mathcal{D} = \text{Num} + \text{ReHop} + \text{ImHop} + \text{Inter})$
+for fermionic systems of various Hamiltonian graphs with 64 vertices using
+the optimized fermionic label ordering for the Jordan–Wigner and Ternary
+Tree transformations" -- the same metric already used for the
+square-lattice challenge, ancilla-free. Full numbers:
+
+```
+                        JW     TT
+Hex-Lattice            7564   5489
+Tri-Lattice            2384   2478
+Periodic Hex-Lattice   8584   4794
+Periodic Tri-Lattice   2704   2356
+Random 3-Regular       2888   2245
+Margulis Gabber Galil 11784   6543
+Chordal Cycle          6976   4431
+```
+
+Only the first four (genuine lattice types) are implemented
+(`harness/graphs.py`) — the last three are specific graph *instances* from
+the paper's own generation (a particular random seed, a particular
+expander construction), not reproducible without their released code
+([`github.com/cameton/QCE_QubitAssignment`](https://github.com/cameton/QCE_QubitAssignment)).
+
+**Reproducibility caveat, confirmed empirically, not just anticipated**:
+our own JW baseline on `harness/graphs.py`'s hex/triangular lattices at
+M=64 lands in the same ballpark as the paper's numbers (thousands) but
+doesn't match exactly -- e.g. hexagonal at the pinned `CANONICAL_SHAPE`
+`(8, 4)`: our JW total=2416/max=16, vs. the paper's JW=7564. The paper's
+caption only says "64-mode system graph"; it doesn't state the exact
+`(Lx, Ly)` shape or aspect ratio used, and our canonical ordering
+(row-major over unit cells) isn't necessarily theirs either. Not treated
+as a bug -- `PAPER_TABLE2` in `scripts/update_leaderboard.py` is included
+as a fixed reference row alongside our own submissions, same pattern as
+`PAPER_TOTAL`/`PAPER_MAX`, not as something our own construction is
+expected to reproduce exactly.
+
+### Aspect-ratio gaming and the `CANONICAL_SHAPE` fix
+
+Unlike square lattices, `M` does **not** determine the graph for these
+lattice types -- e.g. hex-lattice `Lx=8,Ly=4` and `Lx=16,Ly=2` both give
+`M=64` but have different edge counts/boundary structure, hence different
+achievable weight. Gating the "vs. Table II" comparison on "M=64" alone
+would let a submission pick whichever aspect ratio happens to be easiest
+to encode well while still nominally qualifying as "the 64-mode
+benchmark" -- a comparison-integrity gap, not a verifier-security one (a
+submission can't alter which edges exist; it can only choose which shape
+to report against the paper).
+
+Fixed by: (1) `submission.json`'s `sizes` field, for graph-type
+submissions, is an explicit comma-separated list of `LxxLy` pairs
+(`"8x4,15x15"`), not a single swept integer -- see `parse_shapes`/
+`validate_shapes` in `scripts/submission_lib.py`; (2) each graph type gets
+exactly one `(Lx, Ly)` pinned as `CANONICAL_SHAPE` in `harness/graphs.py`
+(`hexagonal`/`periodic_hexagonal`: `(8, 4)`; `triangular`/
+`periodic_triangular`: `(8, 8)` -- chosen only to hit `M=64` exactly, not
+verified to match the paper's own undisclosed split -- these values
+carried over unchanged from the Table III design, since they were never
+about matching a specific paper table, just about hitting M=64); (3)
+`render_graph_challenge_table` in `scripts/update_leaderboard.py` only
+shows a submission's score next to the paper's `[1]` rows when its shape
+is an *exact* match to `CANONICAL_SHAPE` (a "vs. Table II" section) --
+any other shape a submission claims still scores and appears, just in a
+separate "Other shapes" section, not lined up against the paper. The same
+`is_showcased()` rule also now governs the square-lattice challenge's own
+table (see below), so both challenges share one mechanism for "scored and
+cached always, shown only if showcased."
+
+## Rectangular submissions for the square-lattice challenge
+
+The square-lattice challenge's `sizes` grammar (`validate_mixed_sizes` in
+`scripts/submission_lib.py`) now also accepts explicit `LxxLy` rectangle
+pairs mixed in with its original plain-integer/range syntax (`"3-15,8x12"`)
+-- a submission can claim an off-square shape, which gets verified,
+scored, and cached exactly like any other, but doesn't appear in
+`LEADERBOARD.md`'s ranked tables (a strict `Lx = Ly`, `3..15` grid,
+unchanged). Whether a given `(graph, Lx, Ly)` shows up anywhere is decided
+by one function, `is_showcased()` in `scripts/update_leaderboard.py` --
+the single place to add a new showcased shape later without touching how
+scoring/caching works. Backward compatibility was the binding constraint:
+an all-integer `sizes` string parses identically to before
+(`validate_mixed_sizes("3-15") == validate_sizes("3-15")`, tested
+directly), so registry.json's pre-existing plain-int entries, and their
+score-cache hits, are completely unaffected.

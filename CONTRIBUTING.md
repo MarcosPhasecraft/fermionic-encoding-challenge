@@ -72,6 +72,11 @@ harness/            FROZEN — the trusted core; nothing here should change
                      ordering; build_spec(Lx, Ly, order_fn) builds one from
                      a submission's own order() (row_major if None);
                      hamiltonian() builds Majorana-index term lists
+  graphs.py          The graph-challenge analogue of lattice.py:
+                     hex_lattice()/triangular_lattice() (open + periodic),
+                     each with its own canonical default ordering;
+                     build_spec(graph, Lx, Ly, order_fn) dispatches on
+                     graph name -- see LEADERBOARD_GRAPHS.md
   verify.py          verify(spec, mapping) -- checks the mapping is a valid
                      encoding (well-formed, satisfies the Majorana algebra).
                      Never raises on malformed input.
@@ -119,7 +124,10 @@ scripts/
                      the terminal whether to commit/push
   update_leaderboard.py  regenerates LEADERBOARD.md and MEMORY.md (the
                      latter an index of every baseline that shipped with
-                     a memory/ folder) from every registered baseline
+                     a memory/ folder) from every registered baseline, plus
+                     LEADERBOARD_GRAPHS.md for the separate graph
+                     challenge (entries with a "graph" field in
+                     registry.json, scored via harness/graphs.py instead)
 
 tests/               pytest suite
 examples/            Hand-written spec/mapping JSON for run.py's debug path

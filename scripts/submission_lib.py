@@ -25,6 +25,7 @@ REPO_ROOT = Path(__file__).parent.parent.resolve()
 sys.path.insert(0, str(REPO_ROOT))
 
 from harness.evaluate import evaluate
+from harness.graphs import GRAPH_TYPES
 from harness.lattice import build_spec, hamiltonian
 
 BASELINES_DIR = REPO_ROOT / "baselines"
@@ -51,17 +52,28 @@ def save_registry(registry: dict) -> None:
         f.write("\n")
 
 
-def registry_entry(name: str, sizes: list[int], label: str, generated_by=None, submitted_at=None) -> dict:
+def registry_entry(
+    name: str, sizes: list[int | tuple[int, int]], label: str,
+    generated_by=None, submitted_at=None, graph=None,
+) -> dict:
     """Builds one registry.json value -- doesn't read or write the file
     itself, so a caller registering several submissions in one run can
     load_registry() once, build/merge several entries, and save_registry()
     once at the end (or after each, for crash-safety -- caller's choice).
+
+    graph is omitted entirely (not written as "square") when it's the
+    square-lattice default -- keeps every square-lattice entry in
+    registry.json exactly as lean as it's always been; baselines/__init__.py
+    already treats a missing "graph" key as "square" via .get(), so this
+    changes nothing about how existing or future square entries are read.
     """
     entry = {"module": f"baselines.{name}", "sizes": sizes, "label": label}
     if generated_by is not None:
         entry["generated_by"] = generated_by
     if submitted_at is not None:
         entry["submitted_at"] = submitted_at
+    if graph is not None and graph != "square":
+        entry["graph"] = graph
     return entry
 
 
@@ -69,11 +81,14 @@ def parse_sizes(spec: str) -> list[int]:
     sizes = set()
     for part in spec.split(","):
         part = part.strip()
-        if "-" in part:
-            lo, hi = part.split("-")
-            sizes.update(range(int(lo), int(hi) + 1))
-        else:
-            sizes.add(int(part))
+        try:
+            if "-" in part:
+                lo, hi = part.split("-")
+                sizes.update(range(int(lo), int(hi) + 1))
+            else:
+                sizes.add(int(part))
+        except ValueError:
+            raise SubmissionRejected(f"'sizes' entries must be an integer or 'lo-hi' range, got {part!r}")
     return sorted(sizes)
 
 
@@ -86,10 +101,86 @@ def validate_sizes(sizes_str: str) -> list[int]:
     return sizes
 
 
+def shape_key(lx: int, ly: int) -> str:
+    """'8x4' -- the shared shape-string key: it's the manifest sizes-grammar
+    syntax for an explicit (Lx, Ly) pair (parse_shapes/validate_mixed_sizes),
+    and it's also used as-is as the leaderboard score-cache key for any such
+    pair, so a shape written in submission.json is exactly the string that
+    shows up in the cache and (for showcased shapes) on the leaderboard --
+    no separate re-encoding to keep in sync between the two.
+    """
+    return f"{lx}x{ly}"
+
+
+def parse_shapes(spec: str) -> list[tuple[int, int]]:
+    """'8x4,15x15,3x3' -> [(8, 4), (15, 15), (3, 3)] -- the graph
+    challenge's sizes grammar. Unlike parse_sizes, no range syntax:
+    Lx and Ly are independent and a range over pairs is ambiguous, so
+    every shape is spelled out explicitly.
+    """
+    shapes = []
+    for part in spec.split(","):
+        part = part.strip()
+        if "x" not in part:
+            raise SubmissionRejected(f"'sizes' entries must look like 'LxxLy' (e.g. '8x4'), got {part!r}")
+        lx_str, _, ly_str = part.partition("x")
+        try:
+            shapes.append((int(lx_str), int(ly_str)))
+        except ValueError:
+            raise SubmissionRejected(f"'sizes' entries must look like 'LxxLy' (e.g. '8x4'), got {part!r}")
+    return shapes
+
+
+def validate_shapes(sizes_str: str) -> list[tuple[int, int]]:
+    shapes = parse_shapes(sizes_str)
+    if not shapes:
+        raise SubmissionRejected("'sizes' is empty")
+    for lx, ly in shapes:
+        if not (MIN_SIZE <= lx <= MAX_SIZE and MIN_SIZE <= ly <= MAX_SIZE):
+            raise SubmissionRejected(
+                f"each of Lx, Ly must be between {MIN_SIZE} and {MAX_SIZE}, got ({lx}, {ly})"
+            )
+    return shapes
+
+
+def validate_mixed_sizes(sizes_str: str) -> list[int | tuple[int, int]]:
+    """'3-15,8x12' -> [3, 4, ..., 15, (8, 12)] -- the square-lattice
+    challenge's sizes grammar, extended to also accept explicit "LxxLy"
+    rectangle pairs alongside its existing integer/range syntax, mixed in
+    the same comma-separated string. A submission can claim off-square
+    (Lx != Ly) shapes this way; every claimed shape still gets verified,
+    scored, and cached (see scripts/update_leaderboard.py's is_showcased),
+    it just won't necessarily appear in LEADERBOARD.md's 3x3..15x15 grid.
+
+    Splits the comma-separated parts by whether they contain "x", then
+    reuses validate_sizes/validate_shapes for their respective halves --
+    so an all-integer input validates to exactly the same list[int] as
+    plain validate_sizes (existing manifests are unaffected), and bounds/
+    rejection messages stay identical to each half's own validator.
+    """
+    plain_parts, shape_parts = [], []
+    for part in sizes_str.split(","):
+        part = part.strip()
+        (shape_parts if "x" in part else plain_parts).append(part)
+
+    sizes: list[int | tuple[int, int]] = []
+    if plain_parts:
+        sizes += validate_sizes(",".join(plain_parts))
+    if shape_parts:
+        sizes += validate_shapes(",".join(shape_parts))
+    if not sizes:
+        raise SubmissionRejected("'sizes' is empty")
+    return sizes
+
+
 def validate_manifest(manifest: dict) -> dict:
     """Checks a parsed submission.json dict. Returns it back with "sizes"
-    replaced by the parsed list[int] if valid; raises SubmissionRejected
-    with a specific reason otherwise.
+    replaced by the parsed value if valid: for the square-lattice challenge
+    a list mixing plain ints (Lx=Ly) and explicit (Lx, Ly) pairs (see
+    validate_mixed_sizes); for the graph challenge (hexagonal/triangular/
+    periodic variants -- see "graph" below) always a list of explicit
+    (Lx, Ly) pairs (see validate_shapes). Raises SubmissionRejected with a
+    specific reason if anything is invalid.
     """
     if not isinstance(manifest, dict):
         raise SubmissionRejected(f"submission.json must be a JSON object, got {manifest!r}")
@@ -106,15 +197,24 @@ def validate_manifest(manifest: dict) -> dict:
     if not isinstance(label, str) or not label.strip():
         raise SubmissionRejected(f"'label' must be a non-empty string, got {label!r}")
 
-    if not isinstance(manifest["sizes"], str):
-        raise SubmissionRejected(f"'sizes' must be a string (e.g. '3-15'), got {manifest['sizes']!r}")
-    sizes = validate_sizes(manifest["sizes"])
-
     generated_by = manifest.get("generated_by")
     if generated_by is not None and not isinstance(generated_by, str):
         raise SubmissionRejected(f"'generated_by' must be a string if given, got {generated_by!r}")
 
-    return {**manifest, "sizes": sizes}
+    graph = manifest.get("graph", "square")
+    if graph != "square" and graph not in GRAPH_TYPES:
+        raise SubmissionRejected(
+            f"'graph' must be 'square' or one of {sorted(GRAPH_TYPES)} if given, got {graph!r}"
+        )
+
+    if not isinstance(manifest["sizes"], str):
+        raise SubmissionRejected(f"'sizes' must be a string, got {manifest['sizes']!r}")
+    if graph == "square":
+        sizes = validate_mixed_sizes(manifest["sizes"])
+    else:
+        sizes = validate_shapes(manifest["sizes"])
+
+    return {**manifest, "sizes": sizes, "graph": graph}
 
 
 def _top_level_bound_names(tree: ast.Module) -> list[str]:
@@ -176,17 +276,36 @@ def summarize_failure(result: dict) -> str:
     return f"{algebra['n_violations']} Majorana pairs fail to anticommute, e.g. {examples}{more}"
 
 
-def check_at_size(encode_fn, order_fn, l: int) -> tuple[int, int]:
-    """(total, max) at size l x l, under the submission's own declared
-    ordering (row_major if it declares none). Raises SubmissionRejected
-    with a specific size/reason if verify() fails -- never silently
-    accepts a partially-working submission.
+def check_at_size(
+    encode_fn, order_fn, lx: int, ly: int | None = None, spec_builder=build_spec, model: str = "full"
+) -> tuple[int, int]:
+    """(total, max) at shape lx * ly, under the submission's own declared
+    ordering (row_major -- or whatever spec_builder's own canonical default
+    is -- if it declares none). Raises SubmissionRejected with a specific
+    shape/reason if verify() fails -- never silently accepts a
+    partially-working submission.
+
+    ly defaults to lx -- every existing (square-lattice) caller passes a
+    single size and keeps its exact current behavior unchanged. The graph
+    challenge passes lx and ly independently (see harness.graphs.CANONICAL_SHAPE),
+    since mode count alone doesn't pin down the graph there.
+
+    spec_builder/model default to the square-lattice challenge's own
+    harness.lattice.build_spec and the general-complex "full" Hamiltonian --
+    every existing caller keeps its exact current behavior unchanged. The
+    graph challenge (hexagonal/triangular/periodic lattices) passes a
+    spec_builder that closes over which named graph to build (see
+    harness.graphs.build_spec), keeping the same "full" model -- both
+    challenges score D = Num + ReHop + ImHop + Inter, so model never
+    actually needs overriding today, just spec_builder.
     """
-    spec = build_spec(l, l, order_fn)
-    terms = hamiltonian(spec, model="full")
+    if ly is None:
+        ly = lx
+    spec = spec_builder(lx, ly, order_fn)
+    terms = hamiltonian(spec, model=model)
     result = evaluate(spec, encode_fn, terms)
     if not result["passed"]:
-        raise SubmissionRejected(f"FAILED at {l}x{l}: {summarize_failure(result)}")
+        raise SubmissionRejected(f"FAILED at {lx}x{ly}: {summarize_failure(result)}")
     return result["total_weight"], result["max_weight"]
 
 

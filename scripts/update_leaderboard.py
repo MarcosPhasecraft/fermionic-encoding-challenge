@@ -80,13 +80,36 @@ sys.path.insert(0, str(REPO_ROOT))
 # that need to redirect the cache file monkeypatch
 # scripts.submission_lib.CACHE_PATH directly, not a copy here.
 from scripts.progress_chart import TARGET_SIZE, points_at_size, render_progress_chart
-from scripts.submission_lib import harness_fingerprint, hash_file, load_score_cache, save_score_cache
+from scripts.submission_lib import (
+    harness_fingerprint, hash_file, load_score_cache, save_score_cache, shape_key,
+)
 
 from baselines import BASELINES
 from harness.evaluate import evaluate
+from harness.graphs import CANONICAL_SHAPE, build_spec as build_graph_spec
 from harness.lattice import build_spec, hamiltonian
 
 SIZES = list(range(3, 16))
+
+
+def is_showcased(graph: str, lx: int, ly: int) -> bool:
+    """Whether a (graph, Lx, Ly) shape appears in a rendered table/chart, as
+    opposed to just being verified, scored, and cached. The single place
+    this decision is made -- everything downstream (compute_our_entries,
+    compute_graph_entries, the two render_* functions) just calls this,
+    so showcasing a new shape later (a wider square range, a second
+    canonical hex shape, a new graph type) is a one-line edit here, not a
+    rendering rewrite. Today: square shapes showcase iff they're an exact
+    L x L within SIZES (arXiv 2504.21636 Table I's own 3x3..15x15 sweep);
+    every other graph type showcases iff it's an exact match to that
+    type's CANONICAL_SHAPE (Table II's 64-mode instances). Anything else
+    -- an off-square rectangle, an off-canonical hex/tri shape -- is still
+    verified/scored/cached (see scripts/submission_lib.py's
+    validate_mixed_sizes and scripts/process_inbox.py), just not shown.
+    """
+    if graph == "square":
+        return lx == ly and lx in SIZES
+    return (lx, ly) == CANONICAL_SHAPE.get(graph)
 
 # arXiv 2504.21636 Table I, verbatim from the LaTeX source (main.tex, the
 # \begin{table*}...\end{table*} block labeled tab:lattice), for L=3..15.
@@ -101,6 +124,30 @@ PAPER_MAX = {
     "JW": [4, 5, 6, 7, 8, 9, 11, 12, 14, 15, 16, 18, 20],
     "PB": [5, 6, 7, 8, 9, 10, 12, 13, 14, 15, 17, 18, 20],
     "TT": [5, 5, 7, 7, 8, 8, 9, 9, 9, 10, 10, 10, 11],
+}
+
+# arXiv 2504.21636 Table II, verbatim from the LaTeX source (main.tex, the
+# \begin{table}...\end{table} block labeled tab:graphs), for the
+# ancilla-free Jordan-Wigner and Ternary Tree transformations on four
+# 64-mode graphs, under the same D = Num + ReHop + ImHop + Inter metric
+# already used for the square-lattice challenge -- see harness.graphs and
+# NOTES.md for the reproducibility caveat: the paper doesn't state the exact
+# (Lx, Ly)/shape used, so our own construction won't reproduce these numbers
+# exactly, only land in the same ballpark. The other three graphs in the
+# same table (Random 3-Regular, Margulis-Gabber-Galil, Chordal Cycle) are
+# specific instances from the paper's own generation, not reproducible
+# without their released code -- deliberately out of scope here.
+PAPER_TABLE2 = {
+    "hexagonal": {"JW": 7564, "TT": 5489},
+    "triangular": {"JW": 2384, "TT": 2478},
+    "periodic_hexagonal": {"JW": 8584, "TT": 4794},
+    "periodic_triangular": {"JW": 2704, "TT": 2356},
+}
+GRAPH_LABELS = {
+    "hexagonal": "Hex-Lattice",
+    "triangular": "Tri-Lattice",
+    "periodic_hexagonal": "Periodic Hex-Lattice",
+    "periodic_triangular": "Periodic Tri-Lattice",
 }
 
 
@@ -133,6 +180,18 @@ def scored_with_cache(name, encode_fn, order_fn, sizes, file_fp, cache_entries):
     before) is computed via evaluate_baseline and folded into
     cache_entries[name] in place, so the caller can persist it.
 
+    `sizes` entries are either a plain int (Lx=Ly=that int, the original
+    and still by far the common case) or an explicit (Lx, Ly) pair (a
+    submission-claimed rectangle -- see submission_lib.validate_mixed_sizes).
+    Every entry is verified/scored/cached the same way regardless; only
+    entries where is_showcased("square", lx, ly) holds get folded into the
+    returned totals/maxes dicts (keyed by SIZES.index(lx), same as always)
+    -- everything else is still computed and cached, just not returned for
+    LEADERBOARD.md's ranked tables to see. A plain-int entry always uses
+    the cache key str(l) (unchanged from before this existed, so the 17
+    baselines registered before rectangles were possible keep their exact
+    cache hits); an explicit pair uses shape_key(lx, ly) instead.
+
     Pulled out of compute_our_entries() specifically so this -- the actual
     caching decision -- is testable with fake encode_fn/order_fn and an
     arbitrary fingerprint string, without needing real baseline files or
@@ -144,20 +203,157 @@ def scored_with_cache(name, encode_fn, order_fn, sizes, file_fp, cache_entries):
 
     totals, maxes = {}, {}
     any_recomputed = False
-    for l in sizes:
-        i = SIZES.index(l)
-        hit = cached["scores"].get(str(l))
+    for s in sizes:
+        lx, ly = (s, s) if isinstance(s, int) else s
+        key = str(s) if isinstance(s, int) else shape_key(lx, ly)
+        hit = cached["scores"].get(key)
         if hit is not None:
             total, max_weight = hit["total"], hit["max"]
         else:
-            total, max_weight = evaluate_baseline(encode_fn, order_fn, l, l)
-            cached["scores"][str(l)] = {"total": total, "max": max_weight}
+            total, max_weight = evaluate_baseline(encode_fn, order_fn, lx, ly)
+            cached["scores"][key] = {"total": total, "max": max_weight}
             any_recomputed = True
-        totals[i] = total
-        maxes[i] = max_weight
+        if is_showcased("square", lx, ly):
+            i = SIZES.index(lx)
+            totals[i] = total
+            maxes[i] = max_weight
 
     cache_entries[name] = cached
     return totals, maxes, any_recomputed
+
+
+def evaluate_graph_baseline(encode_fn, order_fn, graph, lx, ly):
+    """(total_weight, max_weight) for one graph-challenge baseline -- the
+    graph-challenge analogue of evaluate_baseline, same D = Num + ReHop +
+    ImHop + Inter metric (model="full") as the square-lattice challenge,
+    matching arXiv 2504.21636 Table II.
+    """
+    spec = build_graph_spec(graph, lx, ly, order_fn)
+    terms = hamiltonian(spec, model="full")
+    result = evaluate(spec, encode_fn, terms)
+    if not result["passed"]:
+        raise RuntimeError(f"{encode_fn} failed verify() at {graph} {lx}x{ly}: {result}")
+    return result["total_weight"], result["max_weight"]
+
+
+def scored_with_cache_graph(name, encode_fn, order_fn, graph, sizes, file_fp, cache_entries):
+    """(scores_by_shape, any_recomputed) for one graph-challenge baseline --
+    scores_by_shape: {"LxxLy": {"total": int, "max": int}}. sizes is a
+    list of (lx, ly) pairs -- unlike the square-lattice challenge, mode
+    count alone doesn't pin down the graph here (see harness.graphs.CANONICAL_SHAPE),
+    so every shape a submission claims is scored and cached independently;
+    render_graph_challenge_table decides which of them is_showcased().
+    Deliberately separate from scored_with_cache rather than a shared
+    abstraction: that one is keyed by SIZES.index(l) (a fixed 3..15 column
+    position, specific to the square-lattice table's layout), which doesn't
+    apply here. Shares the same underlying cache file/entries shape
+    (cache_entries[name] = {"fingerprint", "scores"}), so both challenges
+    live in one .leaderboard_cache.json without a second cache file.
+    """
+    cached = cache_entries.get(name)
+    if cached is None or cached["fingerprint"] != file_fp:
+        cached = {"fingerprint": file_fp, "scores": {}}
+
+    scores = {}
+    any_recomputed = False
+    for lx, ly in sizes:
+        key = shape_key(lx, ly)
+        hit = cached["scores"].get(key)
+        if hit is not None:
+            total, max_weight = hit["total"], hit["max"]
+        else:
+            total, max_weight = evaluate_graph_baseline(encode_fn, order_fn, graph, lx, ly)
+            cached["scores"][key] = {"total": total, "max": max_weight}
+            any_recomputed = True
+        scores[key] = {"total": total, "max": max_weight}
+
+    cache_entries[name] = cached
+    return scores, any_recomputed
+
+
+def compute_graph_entries():
+    """{graph_type: [(label, link, {size: {"total", "max"}}), ...]} --
+    the graph-challenge analogue of compute_our_entries(), filtered to
+    exactly the registry entries compute_our_entries() itself excludes
+    (entry.get("graph", "square") != "square"), so every registered
+    baseline is scored by exactly one of the two functions, never both.
+    Shares .leaderboard_cache.json with compute_our_entries() (same file,
+    same "_harness_fingerprint" gate, disjoint "entries" keys by name).
+    """
+    cache = load_score_cache()
+    harness_fp = harness_fingerprint()
+    if cache.get("_harness_fingerprint") != harness_fp:
+        cache = {"_harness_fingerprint": harness_fp, "entries": {}}
+    cache.setdefault("entries", {})
+
+    by_graph = {}
+    for name, entry in BASELINES.items():
+        graph = entry.get("graph", "square")
+        if graph == "square":
+            continue
+        encode_fn, order_fn, sizes = entry["encode"], entry["order"], entry["sizes"]
+        label, module = entry["label"], entry["module"]
+        link = source_link(module)
+        file_fp = hash_file(REPO_ROOT / f"{module.replace('.', '/')}.py")
+
+        scores, any_recomputed = scored_with_cache_graph(
+            name, encode_fn, order_fn, graph, sizes, file_fp, cache["entries"],
+        )
+        status = "recomputed" if any_recomputed else "cached, unchanged"
+        print(f"{name} ({status}, graph={graph}): {scores}")
+        by_graph.setdefault(graph, []).append((label, link, scores))
+
+    save_score_cache(cache)
+    return by_graph
+
+
+def _render_shape_rows(f, rows):
+    f.write("| label | shape | total weight | max weight |\n")
+    f.write("|---|---|---|---|\n")
+    rows = sorted(rows, key=lambda r: r[0])
+    for total, name, size_label, max_weight in rows:
+        f.write(f"| {name} | {size_label} | **{total}** | {max_weight} |\n")
+    f.write("\n")
+
+
+def render_graph_challenge_table(f, graph, entries):
+    """Renders one graph type's section, split into two tiers:
+
+    - "vs. Table II": only rows at exactly this graph's CANONICAL_SHAPE
+      (the one (Lx, Ly) pair pinned as directly comparable to arXiv
+      2504.21636's own published numbers -- see harness.graphs.CANONICAL_SHAPE
+      for why exact-shape match, not just matching mode count M, is required:
+      different (Lx, Ly) splits at the same M are structurally different
+      graphs for these lattice types). Always includes the paper's own
+      JW/TT reference rows here, never in the section below, since those
+      numbers are only meaningful next to the identical shape.
+    - "Other shapes": every other submitted shape, sorted the same way.
+      Omitted entirely (not even a header) if empty -- no submissions have
+      claimed an off-canonical shape yet, so there's nothing to show.
+
+    Both sections sorted by total weight, ascending.
+    """
+    canon_key = shape_key(*CANONICAL_SHAPE[graph])
+
+    canon_rows, other_rows = [], []
+    for label, link, scores in entries:
+        name = f"[{label}]({link})" if link else label
+        for key, s in scores.items():
+            lx, ly = (int(v) for v in key.split("x"))
+            row = (s["total"], name, key, s["max"])
+            (canon_rows if is_showcased(graph, lx, ly) else other_rows).append(row)
+    for method, total in PAPER_TABLE2[graph].items():
+        canon_rows.append((total, f"{method} [1]", f"{canon_key} ref.", "--"))
+
+    f.write(f"## {GRAPH_LABELS[graph]}\n\n")
+    f.write("`D = Num + ReHop + ImHop + Inter`\n\n")
+
+    f.write(f"### vs. Table II ({canon_key})\n\n")
+    _render_shape_rows(f, canon_rows)
+
+    if other_rows:
+        f.write("### Other shapes\n\n")
+        _render_shape_rows(f, other_rows)
 
 
 def compute_our_entries():
@@ -168,7 +364,10 @@ def compute_our_entries():
     claims (registry.json's "sizes" list) -- a size-scoped submission just
     gets fewer entries in its dicts, which render_ranked_table already
     handles as "not ranked at this size" rather than needing an explicit
-    blank convention.
+    blank convention. A baseline may also claim off-square rectangles
+    (see submission_lib.validate_mixed_sizes) -- those are still verified,
+    scored, and cached by scored_with_cache, just excluded here (and hence
+    from every rendered table/chart) via is_showcased.
 
     dated_totals: list of (name, submitted_at, label, {size_index: value}) --
     the same total-weight scores as total_entries, but keeping the
@@ -189,6 +388,12 @@ def compute_our_entries():
 
     total_entries, max_entries, dated_totals = [], [], []
     for name, entry in BASELINES.items():
+        if entry.get("graph", "square") != "square":
+            # Not this leaderboard's/chart's concern -- see the
+            # graph-challenge rendering path instead. Keeps this table and
+            # progress_total_weight.png's timeline structurally unable to
+            # see a non-square entry, not just carefully avoided.
+            continue
         encode_fn, order_fn, sizes = entry["encode"], entry["order"], entry["sizes"]
         label, module = entry["label"], entry["module"]
         link = source_link(module)
@@ -428,8 +633,79 @@ def main():
     body_path.write_text(body_text)
     print(f"wrote {body_path}")
 
-    names_and_labels = [(name, entry["label"]) for name, entry in BASELINES.items()]
+    names_and_labels = [
+        (name, entry["label"]) for name, entry in BASELINES.items()
+        if entry.get("graph", "square") == "square"
+    ]
     write_memory_index(REPO_ROOT / "MEMORY.md", REPO_ROOT / "baselines", names_and_labels)
+
+    write_graph_challenge_leaderboard()
+
+
+def write_graph_challenge_leaderboard():
+    """Writes LEADERBOARD_GRAPHS.md (and _graph_leaderboard_body.md, the
+    Pages-site fragment) -- the beyond-square-lattices challenge, entirely
+    separate from LEADERBOARD.md above: different graphs (hexagonal,
+    triangular, and their periodic variants, not square grids), same
+    D = Num + ReHop + ImHop + Inter metric. Nothing here reads or writes
+    LEADERBOARD.md, _leaderboard_body.md, MEMORY.md, or
+    assets/progress_total_weight.png.
+    """
+    by_graph = compute_graph_entries()
+
+    graph_body = io.StringIO()
+    for graph in GRAPH_LABELS:
+        # Always rendered, even with zero real submissions yet -- the
+        # paper's own PAPER_TABLE2 reference rows are static, not
+        # submission-dependent, same as how the square-lattice tables
+        # always show their paper reference rows regardless of what's
+        # been submitted.
+        render_graph_challenge_table(graph_body, graph, by_graph.get(graph, []))
+    graph_body.write(
+        "## References\n\n"
+        "[1] Chiew, Ibrahim, Safro, Strelchuk, *Optimal fermion-qubit mappings "
+        "via quadratic assignment*, [arXiv 2504.21636]"
+        "(https://arxiv.org/abs/2504.21636), Table II.\n"
+    )
+    graph_body_text = graph_body.getvalue()
+
+    graphs_path = REPO_ROOT / "LEADERBOARD_GRAPHS.md"
+    with open(graphs_path, "w") as f:
+        f.write("# Leaderboard -- beyond square lattices\n\n")
+        f.write(
+            "Generated by `scripts/update_leaderboard.py` — **do not hand-edit this "
+            "file**. A separate challenge from the square-lattice one in "
+            "`LEADERBOARD.md`: the target graphs are the 2D lattice types from arXiv "
+            "2504.21636's Table II (hexagonal, triangular, and their periodic "
+            "variants, not square grids), scored under the exact same "
+            "`D = Num + ReHop + ImHop + Inter` metric as the square-lattice "
+            "challenge. Same non-negotiable rule as the square-lattice challenge: "
+            "the harness does not search orderings on a submission's behalf; each "
+            "graph type ships one canonical default ordering (see "
+            "`harness/graphs.py`), overridable by a submission's own declared "
+            "`order(Lx, Ly) -> perm` exactly as today.\n\n"
+            "A submission declares which shape(s) it targets as explicit `Lx x Ly` "
+            "pairs (e.g. `\"sizes\": \"8x4,15x15\"` in `submission.json` -- see "
+            "`inbox/README.md`), not a single size: for these lattice types, mode "
+            "count `M` alone does **not** determine the graph -- different `(Lx, "
+            "Ly)` splits at the same `M` are structurally different graphs (see "
+            "`harness/graphs.py`'s `CANONICAL_SHAPE`). Each graph type has exactly "
+            "one shape pinned as directly comparable to the paper's own numbers "
+            "(the \"vs. Table II\" section below); a submission at any other "
+            "shape still gets verified, scored, and cached, and shows up in the "
+            "\"Other shapes\" section, just not against `[1]`. `[1]` rows are "
+            "arXiv 2504.21636's own published Table II -- our own construction of "
+            "the canonical shape won't reproduce those numbers exactly (the paper "
+            "doesn't state the exact shape it used), only land in the same "
+            "ballpark; see NOTES.md.\n\n"
+            "Lower is better, on both columns.\n\n"
+        )
+        f.write(graph_body_text)
+    print(f"wrote {graphs_path}")
+
+    graph_body_path = REPO_ROOT / "_graph_leaderboard_body.md"
+    graph_body_path.write_text(graph_body_text)
+    print(f"wrote {graph_body_path}")
 
 
 if __name__ == "__main__":

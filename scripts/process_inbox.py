@@ -74,6 +74,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # repo root, so
 # bare `import submission_lib` would give tests a second, disconnected
 # copy of this module that monkeypatching wouldn't reach.
 from scripts import submission_lib  # noqa: E402
+from harness.graphs import build_spec as build_graph_spec  # noqa: E402
 from scripts.submission_lib import (  # noqa: E402
     REPO_ROOT,
     SubmissionRejected,
@@ -175,12 +176,29 @@ def _process_one(folder: Path, registry: dict) -> dict:
         validate_encode_source(encode_path.read_text())
 
         encode_fn, order_fn = load_submission(str(encode_path))
-        print(f"\ntesting {folder.name!r} ('{manifest['name']}') at sizes {manifest['sizes']} ...", flush=True)
+        graph = manifest["graph"]  # validate_manifest already defaulted this to "square"
+
+        if graph == "square":
+            spec_kwargs = {}  # check_at_size's own default: harness.lattice.build_spec
+        else:
+            # Closes over which named graph to build -- harness.graphs.build_spec
+            # takes (graph, Lx, Ly, order_fn), check_at_size calls spec_builder(lx, ly, order_fn).
+            spec_builder = lambda Lx, Ly, order_fn, graph=graph: build_graph_spec(graph, Lx, Ly, order_fn)
+            spec_kwargs = {"spec_builder": spec_builder}
+
+        print(f"\ntesting {folder.name!r} ('{manifest['name']}') at sizes {manifest['sizes']} (graph={graph!r}) ...", flush=True)
         scores = {}
-        for l in manifest["sizes"]:
-            total, max_weight = check_at_size(encode_fn, order_fn, l)
-            scores[l] = {"total": total, "max": max_weight}
-            print(f"  {l}x{l}: total={total} max={max_weight}", flush=True)
+        for s in manifest["sizes"]:
+            # A "square" submission's sizes can mix plain ints (Lx=Ly) with
+            # explicit (Lx, Ly) rectangle pairs (see submission_lib's
+            # validate_mixed_sizes); a graph-type submission's sizes are
+            # always explicit pairs (validate_shapes). Both normalize the
+            # same way here.
+            lx, ly = (s, s) if isinstance(s, int) else s
+            total, max_weight = check_at_size(encode_fn, order_fn, lx, ly, **spec_kwargs)
+            key = s if isinstance(s, int) else f"{lx}x{ly}"
+            scores[key] = {"total": total, "max": max_weight}
+            print(f"  {lx}x{ly}: total={total} max={max_weight}", flush=True)
 
         dest = submission_lib.BASELINES_DIR / f"{name}.py"
         shutil.copy(encode_path, dest)
@@ -198,7 +216,7 @@ def _process_one(folder: Path, registry: dict) -> dict:
         submitted_at = now.isoformat(timespec="seconds")
         registry[name] = registry_entry(
             name, manifest["sizes"], manifest["label"],
-            generated_by=manifest.get("generated_by"), submitted_at=submitted_at,
+            generated_by=manifest.get("generated_by"), submitted_at=submitted_at, graph=graph,
         )
         save_registry(registry)
         _prewarm_leaderboard_cache(name, dest, scores)
@@ -235,8 +253,9 @@ def _print_summary(results: list[dict]) -> None:
         print(f"  submitted_at: {r['submitted_at']}")
         if r["generated_by"]:
             print(f"  generated_by: {r['generated_by']}")
-        for l, s in sorted(r["scores"].items()):
-            print(f"  {l}x{l}: total={s['total']} max={s['max']}")
+        for l, s in sorted(r["scores"].items(), key=lambda kv: str(kv[0])):
+            size_label = f"{l}x{l}" if isinstance(l, int) else l  # square: bare int size; graph: already "LxxLy"
+            print(f"  {size_label}: total={s['total']} max={s['max']}")
 
     for r in rejected:
         print(f"\n[REJECTED] {r['name']!r}: {r['reason']}")

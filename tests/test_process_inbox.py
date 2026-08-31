@@ -16,11 +16,16 @@ import scripts.process_inbox as process_inbox
 import scripts.submission_lib as submission_lib
 
 
-def _write_submission(inbox_dir, folder_name, name, label, sizes="3", encode_source=None, memory_files=None):
+def _write_submission(
+    inbox_dir, folder_name, name, label, sizes="3", encode_source=None, memory_files=None, graph=None,
+):
     folder = inbox_dir / folder_name
     folder.mkdir(parents=True)
     (folder / "encode.py").write_text(encode_source or "from baselines.jw import encode\n")
-    (folder / "submission.json").write_text(json.dumps({"name": name, "label": label, "sizes": sizes}))
+    manifest = {"name": name, "label": label, "sizes": sizes}
+    if graph is not None:
+        manifest["graph"] = graph
+    (folder / "submission.json").write_text(json.dumps(manifest))
     if memory_files:
         memory_dir = folder / "memory"
         memory_dir.mkdir()
@@ -72,6 +77,48 @@ def test_accepted_submission_lands_in_baselines(tmp_path, monkeypatch):
     assert len(archived) == 1
     assert archived[0].name.endswith("_pytest_smoke_jw")
     assert (archived[0] / "submission.json").is_file()
+
+
+def test_accepted_graph_submission_is_registered_with_its_graph_field(tmp_path, monkeypatch):
+    baselines_dir, registry_path, inbox_dir = _isolate(tmp_path, monkeypatch)
+    _write_submission(
+        inbox_dir, "sub_1", "pytest_smoke_hex", "Pytest Smoke (hex)", sizes="3x3", graph="hexagonal",
+    )
+
+    process_inbox.main()
+
+    registry = json.loads(registry_path.read_text())
+    assert registry["pytest_smoke_hex"]["graph"] == "hexagonal"
+    assert registry["pytest_smoke_hex"]["sizes"] == [[3, 3]]
+    assert (baselines_dir / "pytest_smoke_hex.py").is_file()
+
+
+def test_accepted_square_submission_has_no_graph_field_in_registry(tmp_path, monkeypatch):
+    # "square" is the default and is never written -- keeps every
+    # square-lattice entry exactly as lean as it's always been.
+    baselines_dir, registry_path, inbox_dir = _isolate(tmp_path, monkeypatch)
+    _write_submission(inbox_dir, "sub_1", "pytest_smoke_jw", "Pytest Smoke (JW copy)")
+
+    process_inbox.main()
+
+    registry = json.loads(registry_path.read_text())
+    assert "graph" not in registry["pytest_smoke_jw"]
+
+
+def test_accepted_square_submission_can_also_claim_a_rectangle(tmp_path, monkeypatch):
+    # A "square"-graph submission's sizes can mix plain ints with an
+    # explicit LxxLy rectangle -- it's verified/scored/registered like any
+    # other size, it just won't show up in LEADERBOARD.md's square grid
+    # (that's scripts/update_leaderboard.py's is_showcased's concern, not
+    # process_inbox's).
+    baselines_dir, registry_path, inbox_dir = _isolate(tmp_path, monkeypatch)
+    _write_submission(inbox_dir, "sub_1", "pytest_smoke_rect", "Pytest Smoke (rect)", sizes="3,8x12")
+
+    process_inbox.main()
+
+    registry = json.loads(registry_path.read_text())
+    assert registry["pytest_smoke_rect"]["sizes"] == [3, [8, 12]]
+    assert (baselines_dir / "pytest_smoke_rect.py").is_file()
 
 
 def test_name_collision_rejected_and_not_registered(tmp_path, monkeypatch):

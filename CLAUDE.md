@@ -112,6 +112,45 @@ formula in `Lx, Ly`, like the three built-in orderings it can be built
 from (`row_major_perm`/`snake_perm`/`diagonal_perm`) — not a lookup table
 keyed to specific sizes the submitter happens to know are tested.
 
+**Same rule for the graph challenge** (`LEADERBOARD_GRAPHS.md`, non-square
+graphs — see `harness/graphs.py`): each graph type ships exactly one
+canonical default ordering, and the harness performs no search over
+orderings there either. A submission's own declared `order()` must be a
+genuine formula, not a table keyed to specific sizes, same as the
+square-lattice challenge. Both challenges score the identical
+`D = Num + ReHop + ImHop + Inter` metric — the graph challenge is not a
+different metric, just different graphs.
+
+**The graph challenge's `sizes` grammar needs explicit `LxxLy` pairs; the
+square-lattice challenge's optionally accepts them too, mixed with its
+original plain-integer syntax.** Square-lattice `sizes` (`validate_mixed_sizes`
+in `scripts/submission_lib.py`) still accepts a plain integer or range
+(`"3-15"`, meaning `Lx = Ly`) as it always has, and can *additionally* mix
+in explicit `"LxxLy"` pairs in the same comma-separated string (`"3-15,8x12"`)
+for an off-square rectangle. Graph-challenge `sizes` (`validate_shapes`) is
+always explicit `LxxLy` pairs, no plain-integer shorthand, because for
+these lattice types **mode count `M` does not determine the graph** —
+e.g. hex-lattice `Lx=8,Ly=4` and `Lx=16,Ly=2` both give `M=64` but are
+structurally different graphs (different edge counts/boundary structure).
+
+**Every claimed shape/size, for either challenge, is verified, scored, and
+cached — whether or not it ever appears in a rendered table.** What's
+*shown* is decided by exactly one function, `is_showcased(graph, lx, ly)`
+in `scripts/update_leaderboard.py`: for `"square"`, an exact `Lx == Ly`
+within the leaderboard's `SIZES` range (today's 3x3..15x15, arXiv
+2504.21636 Table I); for every other graph type, an exact match to that
+type's `CANONICAL_SHAPE` (`harness/graphs.py`, arXiv 2504.21636 Table II's
+64-mode instances). Gated on the *exact* shape, not on matching `M`, for
+the graph types: gating on `M` alone would let a submission pick whichever
+aspect ratio is easiest to encode well while still nominally "matching"
+the paper at the same mode count. A submission at any other shape/size
+still gets scored and cached, and (on the graph-challenge side) shown in
+the table's separate "Other shapes" section — just never lined up against
+`[1]`, and (on the square-lattice side) not shown anywhere yet. This is
+the single place to touch when showcasing a new shape later (a wider
+square range, a second canonical hex shape, a new graph type) — not a
+rendering rewrite.
+
 ## Conventions
 
 - Python, `numpy` for the harness. `pytest` for tests. `openfermion` is a
