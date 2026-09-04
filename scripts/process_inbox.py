@@ -300,12 +300,16 @@ def _process_one_ancilla(folder: Path, ancilla_registry: dict) -> dict:
         encode_fn, order_fn, represent_fn = load_submission_extended(str(encode_path))
         graph = manifest["graph"]  # validate_ancilla_manifest already defaulted this to "square"
 
+        claimed_max_weight = manifest["max_weight"]  # validate_ancilla_manifest defaulted this
+
         print(f"\ntesting {folder.name!r} ('{manifest['name']}') at sizes {manifest['sizes']} "
-              f"(challenge=ancillas, graph={graph!r}, max_weight<={submission_lib.ANCILLA_MAX_WEIGHT}) ...", flush=True)
+              f"(challenge=ancillas, graph={graph!r}, max_weight<={claimed_max_weight}) ...", flush=True)
         scores = {}
         for s in manifest["sizes"]:
             lx, ly = (s, s) if isinstance(s, int) else s
-            n_ancillas, max_weight, total_weight = check_ancilla_at_size(encode_fn, represent_fn, order_fn, lx, ly, graph=graph)
+            n_ancillas, max_weight, total_weight = check_ancilla_at_size(
+                encode_fn, represent_fn, order_fn, lx, ly, graph=graph, max_weight=claimed_max_weight,
+            )
             key = s if isinstance(s, int) else f"{lx}x{ly}"
             scores[key] = {"n_ancillas": n_ancillas, "max_weight": max_weight, "total_weight": total_weight}
             print(f"  {lx}x{ly}: n_ancillas={n_ancillas} max_weight={max_weight}", flush=True)
@@ -322,6 +326,7 @@ def _process_one_ancilla(folder: Path, ancilla_registry: dict) -> dict:
         submitted_at = now.isoformat(timespec="seconds")
         ancilla_registry[name] = submission_lib.ancilla_registry_entry(
             name, manifest["sizes"], manifest["label"], graph, represent_fn is not None,
+            max_weight=claimed_max_weight,
             generated_by=manifest.get("generated_by"), submitted_at=submitted_at,
         )
         submission_lib.save_ancilla_registry(ancilla_registry)

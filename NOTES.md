@@ -751,3 +751,37 @@ now -- see CLAUDE.md's own pointer for what adding it later would involve
 (a new baseline module, registered the same way, plus a hexagonal
 table/chart in `scripts/update_leaderboard_ancillas.py` -- no
 rearchitecture needed once the construction itself is right).
+
+### The weight cap became a submission choice, with per-cap boards
+
+The challenge originally hard-coded `max_weight <= 3` (`ANCILLA_MAX_WEIGHT`).
+That was wrong in an interesting way: the object worth studying here is the
+*locality/ancilla trade-off curve*, and a fixed cap only ever shows one point
+on it. The cap is now `"max_weight"` in `submission.json`, any positive
+integer, defaulting to 3 so every manifest and registry entry written before
+the field existed keeps its exact meaning.
+
+**Boards rank on the ACHIEVED weight, not the claimed cap** -- the one design
+decision here worth stating explicitly, because the obvious alternative
+(bucket each entry onto the board matching what it claimed) is subtly wrong.
+An encoding reaching weight 3 everywhere belongs on the weight-4 board too:
+"how few ancillas if you're allowed weight 4" is only answered honestly if
+weight-3 constructions count. So the claimed cap is purely an *acceptance
+gate* (checked at every claimed size, no partial credit), while board
+membership is recomputed from what the encoding actually achieved. A
+consequence worth keeping: claiming a generous cap can never cost an entry a
+place on a tighter board it would otherwise have earned.
+
+That's also why the per-size score cache stores the achieved weight next to
+`n_ancillas`. Cache entries written before per-track ranking existed have
+only `n_ancillas`, and are deliberately treated as a *miss* and recomputed --
+inferring the weight from the claimed cap would silently mis-file a tight
+encoding onto only the loose board, which no test would catch because the
+number itself would look plausible.
+
+Currently showcased: caps 3 and 4 (`ANCILLA_SHOWCASED_MAX_WEIGHTS`). Derby-
+Klassen anchors both. It's a genuinely open target on the weight-4 board,
+not a formality: per the DK paper's own Table I, the published weight-4
+constructions ([10,11] at `2L^2` qubits, [15] at `2L(L-1)`, [14] at `3L^2`)
+all use *more* qubits than DK's `1.5L^2 - L` at weight 3, so nothing in the
+literature yet exploits the looser cap to spend fewer ancillas.

@@ -342,7 +342,20 @@ def harness_fingerprint() -> str:
 # path through this module is completely unchanged.
 # ---------------------------------------------------------------------------
 
-ANCILLA_MAX_WEIGHT = 3  # fixed by the challenge itself -- not submission-configurable
+# The weight cap a submission is held to is CHOSEN BY THE SUBMISSION
+# ("max_weight" in submission.json), not fixed by the challenge -- the whole
+# point of this challenge is the ancilla-count/locality trade-off curve, and
+# pinning one cap would only ever show one point on it. A submission omitting
+# the field means 3 (the tightest cap any published construction reaches, and
+# what every entry registered before the field existed was held to), so
+# existing manifests and registry entries keep their exact meaning.
+#
+# Which caps get a rendered leaderboard table/chart is a separate, purely
+# presentational decision, and lives in scripts/update_leaderboard_ancillas.py
+# (ANCILLA_SHOWCASED_MAX_WEIGHTS) -- same "verified, scored, and cached
+# always; shown only if showcased" split as is_showcased() draws for shapes
+# in the ancilla-free challenges.
+ANCILLA_DEFAULT_MAX_WEIGHT = 3
 ANCILLA_GRAPH_TYPES = {"square", "hexagonal"}
 ANCILLA_BASELINES_DIR = REPO_ROOT / "harness" / "v2" / "baselines"
 ANCILLA_REGISTRY_PATH = ANCILLA_BASELINES_DIR / "registry.json"
@@ -376,11 +389,11 @@ def save_ancilla_registry(registry: dict) -> None:
 
 def ancilla_registry_entry(
     name: str, sizes: list, label: str, graph: str, has_represent: bool,
-    generated_by=None, submitted_at=None,
+    max_weight: int = ANCILLA_DEFAULT_MAX_WEIGHT, generated_by=None, submitted_at=None,
 ) -> dict:
     entry = {
         "module": f"harness.v2.baselines.{name}", "sizes": sizes, "label": label,
-        "graph": graph, "has_represent": has_represent,
+        "graph": graph, "has_represent": has_represent, "max_weight": max_weight,
     }
     if generated_by is not None:
         entry["generated_by"] = generated_by
@@ -393,8 +406,11 @@ def validate_ancilla_manifest(manifest: dict) -> dict:
     """Like validate_manifest, but for a "challenge": "ancillas" submission
     -- a separate function, not a branch inside validate_manifest, since the
     allowed graph choices (square/hexagonal only, no triangular or periodic
-    variants -- see NOTES.md) and the fixed max_weight differ from the
-    ancilla-free challenges' own manifest shape.
+    variants -- see NOTES.md) and the extra "max_weight" field differ from
+    the ancilla-free challenges' own manifest shape.
+
+    Returns the manifest with "sizes" parsed, "graph" defaulted to "square",
+    and "max_weight" defaulted to ANCILLA_DEFAULT_MAX_WEIGHT.
     """
     if not isinstance(manifest, dict):
         raise SubmissionRejected(f"submission.json must be a JSON object, got {manifest!r}")
@@ -421,20 +437,38 @@ def validate_ancilla_manifest(manifest: dict) -> dict:
             f"'graph' must be one of {sorted(ANCILLA_GRAPH_TYPES)} for the ancilla challenge, got {graph!r}"
         )
 
+    # The weight cap this submission claims to satisfy. Any positive integer
+    # -- the challenge doesn't pick one for you (see ANCILLA_DEFAULT_MAX_WEIGHT
+    # above). A bool is rejected explicitly: isinstance(True, int) is True in
+    # Python, and silently reading "max_weight": true as a cap of 1 would be a
+    # baffling rejection message downstream.
+    max_weight = manifest.get("max_weight", ANCILLA_DEFAULT_MAX_WEIGHT)
+    if isinstance(max_weight, bool) or not isinstance(max_weight, int) or max_weight < 1:
+        raise SubmissionRejected(f"'max_weight' must be a positive integer if given, got {max_weight!r}")
+
     if not isinstance(manifest["sizes"], str):
         raise SubmissionRejected(f"'sizes' must be a string, got {manifest['sizes']!r}")
     sizes = validate_mixed_sizes(manifest["sizes"]) if graph == "square" else validate_shapes(manifest["sizes"])
 
-    return {**manifest, "sizes": sizes, "graph": graph}
+    return {**manifest, "sizes": sizes, "graph": graph, "max_weight": max_weight}
 
 
-def check_ancilla_at_size(encode_fn, represent_fn, order_fn, lx: int, ly: int | None = None, graph: str = "square") -> tuple[int, int, int]:
-    """(n_ancillas, max_weight, total_weight) at shape lx * ly for the
-    ancilla challenge. Raises SubmissionRejected if verification fails OR
-    if max_weight exceeds ANCILLA_MAX_WEIGHT -- a submission must back its
-    claim (max_weight <= 3) at every size it claims, exactly like the
-    ancilla-free challenges' own check_at_size never silently accepts a
-    partial pass.
+def check_ancilla_at_size(
+    encode_fn, represent_fn, order_fn, lx: int, ly: int | None = None,
+    graph: str = "square", max_weight: int = ANCILLA_DEFAULT_MAX_WEIGHT,
+) -> tuple[int, int, int]:
+    """(n_ancillas, achieved_max_weight, total_weight) at shape lx * ly for
+    the ancilla challenge. Raises SubmissionRejected if verification fails OR
+    if the achieved max weight exceeds `max_weight` -- the cap the submission
+    itself claimed. A submission must back that claim at every size it
+    claims, exactly like the ancilla-free challenges' own check_at_size never
+    silently accepts a partial pass.
+
+    Note the returned max weight is what the encoding ACHIEVED, not the cap
+    it claimed -- an encoding claiming <= 4 that actually reaches 3
+    everywhere qualifies for the weight-3 leaderboard too, and
+    scripts/update_leaderboard_ancillas.py ranks on the achieved value for
+    exactly that reason.
     """
     from harness.graphs import build_spec as build_graph_spec
     from harness.v2.evaluate import evaluate_extended
@@ -447,10 +481,10 @@ def check_ancilla_at_size(encode_fn, represent_fn, order_fn, lx: int, ly: int | 
     result = evaluate_extended(spec, encode_fn, terms, represent_fn)
     if not result["passed"]:
         raise SubmissionRejected(f"FAILED at {lx}x{ly}: {summarize_ancilla_failure(result)}")
-    if result["max_weight"] > ANCILLA_MAX_WEIGHT:
+    if result["max_weight"] > max_weight:
         raise SubmissionRejected(
             f"FAILED at {lx}x{ly}: max_weight {result['max_weight']} exceeds the "
-            f"ancilla challenge's fixed cap of {ANCILLA_MAX_WEIGHT}"
+            f"cap of {max_weight} this submission claims"
         )
     return result["n_ancillas"], result["max_weight"], result["total_weight"]
 

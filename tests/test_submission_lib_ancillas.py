@@ -7,7 +7,7 @@ style for the ancilla-free equivalents.
 import pytest
 
 from scripts.submission_lib import (
-    ANCILLA_MAX_WEIGHT,
+    ANCILLA_DEFAULT_MAX_WEIGHT,
     SubmissionRejected,
     ancilla_registry_entry,
     check_ancilla_at_size,
@@ -86,7 +86,7 @@ def test_check_ancilla_at_size_reports_ancilla_count_for_a_verifiably_valid_enco
 
 def test_check_ancilla_at_size_rejects_max_weight_over_the_cap():
     # JW's own raw max_weight at 3x3 is 4 (see README.md's own example) --
-    # exceeds ANCILLA_MAX_WEIGHT (3), even though verification itself passes.
+    # exceeds the default cap of 3, even though verification itself passes.
     with pytest.raises(SubmissionRejected, match="exceeds"):
         check_ancilla_at_size(_jw_plus_spectator, None, None, 3)
 
@@ -94,7 +94,7 @@ def test_check_ancilla_at_size_rejects_max_weight_over_the_cap():
 def test_check_ancilla_at_size_dk_passes_within_the_weight_cap():
     from harness.v2.baselines.dk import encode, represent
     n_ancillas, max_weight, total_weight = check_ancilla_at_size(encode, represent, None, 3)
-    assert max_weight <= ANCILLA_MAX_WEIGHT
+    assert max_weight <= ANCILLA_DEFAULT_MAX_WEIGHT
     assert n_ancillas == 2
 
 
@@ -120,10 +120,14 @@ def test_check_ancilla_at_size_threads_graph_through_to_the_right_spec_builder()
 # ---- ancilla_registry_entry ---------------------------------------------------
 
 def test_ancilla_registry_entry_shape():
-    entry = ancilla_registry_entry("dk", [3, 5, 7], "Derby-Klassen", "square", True, submitted_at="2026-01-01T00:00:00+00:00")
+    entry = ancilla_registry_entry(
+        "dk", [3, 5, 7], "Derby-Klassen", "square", True, max_weight=3,
+        submitted_at="2026-01-01T00:00:00+00:00",
+    )
     assert entry == {
         "module": "harness.v2.baselines.dk", "sizes": [3, 5, 7], "label": "Derby-Klassen",
-        "graph": "square", "has_represent": True, "submitted_at": "2026-01-01T00:00:00+00:00",
+        "graph": "square", "has_represent": True, "max_weight": 3,
+        "submitted_at": "2026-01-01T00:00:00+00:00",
     }
 
 
@@ -154,3 +158,46 @@ def test_harness_v2_fingerprint_unaffected_by_baselines_subdir(tmp_path, monkeyp
     finally:
         scratch.unlink()
     assert before == after
+
+
+# ---- submission-chosen weight cap ---------------------------------------------
+
+def test_validate_ancilla_manifest_defaults_max_weight_to_3():
+    manifest = validate_ancilla_manifest({"name": "x", "label": "x", "sizes": "3"})
+    assert manifest["max_weight"] == ANCILLA_DEFAULT_MAX_WEIGHT == 3
+
+
+def test_validate_ancilla_manifest_accepts_an_explicit_cap():
+    manifest = validate_ancilla_manifest({"name": "x", "label": "x", "sizes": "3", "max_weight": 4})
+    assert manifest["max_weight"] == 4
+
+
+def test_validate_ancilla_manifest_accepts_any_positive_cap():
+    # The challenge doesn't restrict the cap -- only which caps get a
+    # rendered board (ANCILLA_SHOWCASED_MAX_WEIGHTS) is restricted.
+    assert validate_ancilla_manifest({"name": "x", "label": "x", "sizes": "3", "max_weight": 9})["max_weight"] == 9
+
+
+@pytest.mark.parametrize("bad", [0, -1, 2.5, "4", None, True])
+def test_validate_ancilla_manifest_rejects_a_non_positive_int_cap(bad):
+    with pytest.raises(SubmissionRejected, match="max_weight"):
+        validate_ancilla_manifest({"name": "x", "label": "x", "sizes": "3", "max_weight": bad})
+
+
+def test_check_ancilla_at_size_honours_a_looser_cap():
+    # JW plus a spectator ancilla reaches max weight 4 at 3x3 -- rejected
+    # under the default cap of 3, accepted when the submission claims 4.
+    with pytest.raises(SubmissionRejected, match="exceeds the cap of 3"):
+        check_ancilla_at_size(_jw_plus_spectator, None, None, 3, max_weight=3)
+
+    n_ancillas, achieved, _ = check_ancilla_at_size(_jw_plus_spectator, None, None, 3, max_weight=4)
+    assert n_ancillas == 1
+    assert achieved == 4  # the ACHIEVED weight, not the claimed cap
+
+
+def test_check_ancilla_at_size_returns_achieved_not_claimed_weight():
+    # DK reaches 3; claiming a looser cap of 5 must not inflate what's
+    # reported, since the achieved value is what decides board membership.
+    from harness.v2.baselines.dk import encode, represent
+    _, achieved, _ = check_ancilla_at_size(encode, represent, None, 3, max_weight=5)
+    assert achieved == 3

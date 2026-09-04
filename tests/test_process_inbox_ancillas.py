@@ -53,13 +53,15 @@ def encode(spec):
 """
 
 
-def _write_ancilla_submission(inbox_dir, folder_name, name, label, sizes="3", encode_source=None, graph=None, memory_files=None):
+def _write_ancilla_submission(inbox_dir, folder_name, name, label, sizes="3", encode_source=None, graph=None, memory_files=None, max_weight=None):
     folder = inbox_dir / folder_name
     folder.mkdir(parents=True)
     (folder / "encode.py").write_text(encode_source or _DK_SOURCE)
     manifest = {"name": name, "label": label, "sizes": sizes, "challenge": "ancillas"}
     if graph is not None:
         manifest["graph"] = graph
+    if max_weight is not None:
+        manifest["max_weight"] = max_weight
     (folder / "submission.json").write_text(json.dumps(manifest))
     if memory_files:
         memory_dir = folder / "memory"
@@ -185,3 +187,38 @@ def test_missing_challenge_key_defaults_to_the_ancilla_free_pipeline(tmp_path, m
 
     weight_registry = json.loads(submission_lib.REGISTRY_PATH.read_text())
     assert "frank_jw" in weight_registry
+
+
+# ---- submission-chosen weight cap, end to end --------------------------------
+
+def test_weight_4_submission_is_rejected_without_declaring_the_looser_cap(tmp_path, monkeypatch):
+    _, ancilla_registry_path, inbox_dir = _isolate(tmp_path, monkeypatch)
+    # No "max_weight" -> default cap of 3, which this encoding (reaching 4) misses.
+    _write_ancilla_submission(inbox_dir, "gina", "gina_w4", "Gina's Weight-4", encode_source=_JW_PLUS_SPECTATOR_SOURCE)
+
+    process_inbox.main()
+
+    assert "gina_w4" not in json.loads(ancilla_registry_path.read_text())
+
+
+def test_weight_4_submission_is_accepted_when_it_declares_max_weight_4(tmp_path, monkeypatch):
+    _, ancilla_registry_path, inbox_dir = _isolate(tmp_path, monkeypatch)
+    _write_ancilla_submission(
+        inbox_dir, "gina", "gina_w4", "Gina's Weight-4",
+        encode_source=_JW_PLUS_SPECTATOR_SOURCE, max_weight=4,
+    )
+
+    process_inbox.main()
+
+    registry = json.loads(ancilla_registry_path.read_text())
+    assert "gina_w4" in registry
+    assert registry["gina_w4"]["max_weight"] == 4
+
+
+def test_registered_cap_defaults_to_3_when_unspecified(tmp_path, monkeypatch):
+    _, ancilla_registry_path, inbox_dir = _isolate(tmp_path, monkeypatch)
+    _write_ancilla_submission(inbox_dir, "alice", "alice_ancilla", "Alice's Ancilla Encoding")
+
+    process_inbox.main()
+
+    assert json.loads(ancilla_registry_path.read_text())["alice_ancilla"]["max_weight"] == 3

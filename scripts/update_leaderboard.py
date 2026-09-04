@@ -626,7 +626,7 @@ def write_memory_index(path: Path, baselines_dir: Path, names_and_labels) -> Non
     print(f"wrote {path}")
 
 
-def render_ranked_table(f, title, formula, entries, column_labels=None):
+def render_ranked_table(f, title, formula, entries, column_labels=None, heading=True):
     """Renders one rank-based table: rows are rank positions (row 1 is
     whoever wins at that column, not a fixed encoding -- see the module
     docstring), columns are whatever column_labels names. Defaults to the
@@ -635,11 +635,17 @@ def render_ranked_table(f, title, formula, entries, column_labels=None):
     reusing this same function rather than a second copy of the rank/tie
     logic -- entries is already shaped identically either way:
     [(label, link, {column_index: value}), ...].
+
+    heading=False skips the "## {title}" line, for a caller that already
+    wrote its own section heading (the ancilla challenge writes one heading
+    per weight track, then a chart, then this table under it -- two
+    headings there would read as two sections).
     """
     if column_labels is None:
         column_labels = [f"{l}×{l}" for l in SIZES]
 
-    f.write(f"## {title}\n\n")
+    if heading:
+        f.write(f"## {title}\n\n")
     f.write(f"`{formula}`\n\n")
 
     columns = []

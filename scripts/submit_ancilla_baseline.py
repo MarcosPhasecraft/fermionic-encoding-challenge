@@ -27,6 +27,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from scripts import submission_lib  # noqa: E402
 from scripts.submission_lib import (  # noqa: E402
+    ANCILLA_DEFAULT_MAX_WEIGHT,
     ANCILLA_GRAPH_TYPES,
     MAX_SIZE,
     MIN_SIZE,
@@ -49,8 +50,14 @@ def main():
     parser.add_argument("--graph", default="square", choices=sorted(ANCILLA_GRAPH_TYPES))
     parser.add_argument("--sizes", required=True, help="square: e.g. '3-15'; hexagonal: explicit 'LxxLy' pairs")
     parser.add_argument("--label", default=None)
+    parser.add_argument(
+        "--max-weight", type=int, default=ANCILLA_DEFAULT_MAX_WEIGHT,
+        help=f"the max Pauli weight cap this encoding claims to satisfy (default {ANCILLA_DEFAULT_MAX_WEIGHT})",
+    )
     parser.add_argument("--force", action="store_true")
     args = parser.parse_args()
+    if args.max_weight < 1:
+        raise SystemExit(f"--max-weight must be a positive integer, got {args.max_weight}")
 
     try:
         sizes = validate_mixed_sizes(args.sizes) if args.graph == "square" else validate_shapes(args.sizes)
@@ -63,11 +70,13 @@ def main():
 
     encode_fn, order_fn, represent_fn = load_submission_extended(args.file)
 
-    print(f"testing '{args.name}' at sizes {sizes} (graph={args.graph!r}) ...")
+    print(f"testing '{args.name}' at sizes {sizes} (graph={args.graph!r}, max_weight<={args.max_weight}) ...")
     try:
         for s in sizes:
             lx, ly = (s, s) if isinstance(s, int) else s
-            n_ancillas, max_weight, total_weight = check_ancilla_at_size(encode_fn, represent_fn, order_fn, lx, ly, graph=args.graph)
+            n_ancillas, max_weight, total_weight = check_ancilla_at_size(
+                encode_fn, represent_fn, order_fn, lx, ly, graph=args.graph, max_weight=args.max_weight,
+            )
             print(f"  {lx}x{ly}: n_ancillas={n_ancillas} max_weight={max_weight} total_weight={total_weight}")
     except SubmissionRejected as e:
         raise SystemExit(str(e))
@@ -78,7 +87,8 @@ def main():
 
     submitted_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
     registry[args.name] = ancilla_registry_entry(
-        args.name, sizes, args.label or args.name, args.graph, represent_fn is not None, submitted_at=submitted_at,
+        args.name, sizes, args.label or args.name, args.graph, represent_fn is not None,
+        max_weight=args.max_weight, submitted_at=submitted_at,
     )
     save_ancilla_registry(registry)
 

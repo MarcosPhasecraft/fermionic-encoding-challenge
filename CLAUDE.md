@@ -245,12 +245,27 @@ row-span membership) before trusting its weight. An uncertified proposal
 fails the whole submission — never silently falls back to the raw weight,
 which would let a wrong `represent()` under-report weight undetected.
 
-**Max Pauli weight is fixed at 3 by the challenge itself** —
-`ANCILLA_MAX_WEIGHT` in `scripts/submission_lib.py` — not a
-submission-configurable field. A submission's job is to minimize
-`n_ancillas` subject to that fixed cap, checked at every size claimed
-exactly like every other pass/fail criterion in this repo (no partial
-credit for a size that exceeds it).
+**The max-weight cap is the submission's choice, and ranking uses the
+ACHIEVED weight, not the claimed cap.** `"max_weight"` in
+`submission.json` (any positive int; `ANCILLA_DEFAULT_MAX_WEIGHT` = 3 when
+omitted, so pre-existing manifests keep their meaning) sets the *acceptance
+gate*: the achieved weight must be within it at every size claimed, no
+partial credit. But which leaderboard boards an accepted entry appears on
+is decided by what it actually achieved — an encoding reaching weight 3
+is listed on the weight-3 *and* weight-4 boards, since a tighter encoding
+trivially satisfies a looser cap. Two consequences worth not
+re-litigating: claiming a generous cap never costs an entry a place on a
+tighter board it earned, and the weight-4 board is only honest *because*
+it includes the weight-3 constructions.
+
+`ANCILLA_SHOWCASED_MAX_WEIGHTS` in
+`scripts/update_leaderboard_ancillas.py` is the single place deciding
+which caps get rendered (currently `[3, 4]`) — purely presentational, the
+same "always verified/scored/cached, shown only if showcased" split
+`is_showcased()` draws for shapes. The per-size score cache stores the
+achieved weight alongside `n_ancillas` for exactly this reason; a cache
+entry missing it is treated as a miss and recomputed rather than having
+the weight guessed from the claimed cap.
 
 **Square and hexagonal only** — not triangular, not the periodic variants.
 `ANCILLA_GRAPH_TYPES` in `scripts/submission_lib.py` is the single place

@@ -247,24 +247,44 @@ stabilizers mutually commuting, stabilizers commuting with every Majorana,
 and the stabilizer group having exactly the right rank to leave a genuine
 `M`-mode Fock space behind — see `harness/v2/verify.py`).
 
-**The challenge, precisely.** The maximum Pauli weight is fixed at **3** —
-checked at every size a submission claims, not just asserted — and the goal
-is to *minimize the number of ancilla qubits* (`N - M`) needed to reach a
-genuinely valid encoding at that weight. Lower is better. Square lattices
-`3×3` through `15×15` (the same range as the ancilla-free challenge above);
-hexagonal lattices are a valid target too (same sizes as the graph
-challenge's own hexagonal sweep — see
+**The challenge, precisely.** Cap the maximum Pauli weight, then *minimize
+the number of ancilla qubits* (`N - M`) needed to reach a genuinely valid
+encoding under that cap. Lower is better, and the cap is checked at every
+size a submission claims, not just asserted.
+
+**You choose the cap.** It's `"max_weight"` in `submission.json` (default
+`3`), not something the challenge fixes for you — the interesting object
+here is the whole locality/ancilla trade-off curve, and pinning one cap
+would only ever show one point on it. Boards are currently rendered for
+**weight 3 and weight 4**; any other cap is still verified, scored, and
+cached, just not displayed yet (one line in
+`scripts/update_leaderboard_ancillas.py` showcases a new one).
+
+**A submission is ranked by the weight it actually achieves, not the cap it
+claimed**, so it appears on *every* board whose cap it satisfies — an
+encoding reaching weight 3 everywhere is listed on both the weight-3 and
+weight-4 boards, since it trivially satisfies the looser cap. That's what
+makes the weight-4 board honest: "how few ancillas if you're allowed weight
+4" has to include the weight-3 constructions too.
+
+Square lattices `3×3` through `15×15` (the same range as the ancilla-free
+challenge above); hexagonal lattices are a valid target too (same sizes as
+the graph challenge's own hexagonal sweep — see
 [`LEADERBOARD_GRAPHS.md`](LEADERBOARD_GRAPHS.md)), accepted, verified, and
 scored identically, but not yet shown on the leaderboard — there's no working
 hexagonal reference construction there yet (see `NOTES.md` if you're curious
 why, or want to take a crack at it yourself).
 
-**The starting point** is [Derby-Klassen](https://arxiv.org/abs/2003.06939)
+**The starting point** on every board is
+[Derby-Klassen](https://arxiv.org/abs/2003.06939)
 (`harness/v2/baselines/dk.py`), reconstructed directly from the paper and
 verified to reproduce its own claimed results exactly (max weight 3, fewer
-than 1.5 qubits per mode) — shown as the dotted reference line on the
-leaderboard's chart. Beating it means using *fewer* ancillas while still
-genuinely hitting weight ≤ 3, not gaming either constraint.
+than 1.5 qubits per mode) — shown as the dotted reference line on each
+chart. It anchors the weight-4 board as well as the weight-3 one: no
+published construction reaches weight 4 with fewer qubits than DK reaches
+weight 3 with, so there's real room there. Beating it means using *fewer*
+ancillas while still genuinely meeting the cap, not gaming either
+constraint.
 
 **How a submission is told apart from the others.** `submission.json` gets
 one new field: `"challenge": "ancillas"`. That's the *entire* detection
@@ -280,12 +300,14 @@ Concretely:
   "label": "Alice's DK Variant",
   "sizes": "3-15",
   "challenge": "ancillas",
+  "max_weight": 4,
   "graph": "square"
 }
 ```
 
-`graph` defaults to `"square"` if omitted; set it to `"hexagonal"` to target
-the hexagonal lattice instead (using the graph challenge's own explicit
+`max_weight` defaults to `3` if omitted — set it to `4` (or anything else)
+to target a looser board. `graph` defaults to `"square"` if omitted; set it
+to `"hexagonal"` to target the hexagonal lattice instead (using the graph challenge's own explicit
 `"LxxLy"` sizes grammar there, exactly as in `inbox/README.md`'s existing
 description of that grammar). `encode.py` may additionally define
 `represent(term, raw_pauli, spec, mapping) -> str`, an optional hook for

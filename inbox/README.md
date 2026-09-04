@@ -55,10 +55,13 @@ Ancilla/stabilizer challenge (note the added `"challenge"` field -- see its own 
   "label": "Alice's DK Variant",
   "sizes": "3-15",
   "challenge": "ancillas",
+  "max_weight": 4,
   "graph": "square",
   "generated_by": "Claude Opus 4.5"
 }
 ```
+
+(`"max_weight"` is optional and defaults to 3 -- see the section below.)
 
 - **`name`** (required) — the registry key and filename:
   `baselines/<name>.py`. Must match `^[a-z][a-z0-9_]*$` (lowercase, starts
@@ -201,14 +204,34 @@ silently ignored or silently accepted. Omit `represent()` entirely and the
 raw Majorana product is scored as-is, exactly like the ancilla-free
 challenges already do.
 
-**Acceptance criterion.** Verification must pass *and* `max_weight <= 3`
-(fixed by the challenge — `ANCILLA_MAX_WEIGHT` in
-`scripts/submission_lib.py`, not a field you set) at every size claimed.
-`sizes`' grammar depends on `graph` exactly as it does for the ancilla-free
-challenges (`graph` omitted or `"square"`: `validate_mixed_sizes`;
-`"hexagonal"`: `validate_shapes`) — `"triangular"` and the periodic variants
-are **not** valid here, unlike the ancilla-free graph challenge, since
-there's no working reference construction for them yet.
+**`"max_weight"` (optional, default 3)** — the maximum Pauli weight cap
+this submission claims to satisfy. **The submission picks it; the challenge
+does not fix it.** Any positive integer is accepted. A submission omitting
+the field means 3, so every manifest and registry entry written before this
+field existed keeps its exact meaning.
+
+Which caps get a *rendered board* is a separate, purely presentational
+decision — `ANCILLA_SHOWCASED_MAX_WEIGHTS` in
+`scripts/update_leaderboard_ancillas.py`, currently `[3, 4]`. A submission
+claiming any other cap is still verified, scored, and cached, it just isn't
+displayed yet; showcasing it later is a one-line change, no rescoring.
+
+**Ranking uses the ACHIEVED weight, not the claimed cap.** An entry is
+listed on every showcased board whose cap it actually meets — an encoding
+that reaches weight 3 everywhere appears on both the weight-3 and weight-4
+boards (a tighter encoding trivially satisfies a looser cap); one reaching
+weight 4 appears only on the weight-4 board. So claiming a generous cap
+never costs you a place on a tighter board you'd have earned anyway; it
+only widens what's accepted.
+
+**Acceptance criterion.** Verification must pass *and* the achieved max
+weight must be `<=` the claimed `max_weight`, at **every** size claimed --
+no partial credit for a size that misses it. `sizes`' grammar depends on
+`graph` exactly as it does for the ancilla-free challenges (`graph` omitted
+or `"square"`: `validate_mixed_sizes`; `"hexagonal"`: `validate_shapes`) —
+`"triangular"` and the periodic variants are **not** valid here, unlike the
+ancilla-free graph challenge, since there's no working reference
+construction for them yet.
 
 **Where it lands.** A passing submission is copied to
 `harness/v2/baselines/<name>.py` (not `baselines/<name>.py`) and registered
@@ -226,7 +249,8 @@ Manual, one-file-at-a-time testing before sending a submission over:
 
 ```bash
 python3 scripts/submit_ancilla_baseline.py --file their_encode.py \
-    --name theirname --graph square --sizes 3-15 --label "Their DK Variant"
+    --name theirname --graph square --sizes 3-15 --max-weight 4 \
+    --label "Their DK Variant"
 ```
 
 the ancilla-challenge analogue of `scripts/submit_baseline.py`.
