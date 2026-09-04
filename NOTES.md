@@ -667,24 +667,66 @@ rule, Table I's weight claims) versus this implementation's own completion
 (the concrete row/column-uniform edge-orientation rule, and the L-shaped
 spanning path used to build one global Majorana per vertex from the
 paper's edge operators). Empirically verified against the harness itself
-at every tested "case I" size (Supplementary Material's term for when the
-full `M`-mode Fock space is represented, not a restricted or extended
-one -- requires `Lx`, `Ly` not both even): `verify_extended` passes,
-qubit count stays under the paper's claimed `1.5x`-per-mode bound
-(reaching `1.44x` at `15x15`), and `represent()` reproduces Table I's
-*exact* claimed weights (`max_rehop=3`, `max_imhop=3`, `max_num=1`,
-`max_int=2`) via closed-form identities derived from the paper's own
-relations (`gammabar_j = i*gamma_j*Z_j`, itself following from
-`V_j := -i*gamma_j*gammabar_j = Z_j`), not search. Both-even sizes are
-rejected with a clear, documented error rather than silently
-misrepresenting a different Hilbert space as the full one.
+at every size `3x3..15x15`: `verify_extended` passes, qubit count stays
+under the paper's claimed `1.5x`-per-mode bound (reaching `1.41x` at
+`15x15`), and `represent()` reproduces Table I's *exact* claimed weights
+(`max_rehop=3`, `max_imhop=3`, `max_num=1`, `max_int=2`) via closed-form
+identities derived from the paper's own relations
+(`gammabar_j = i*gamma_j*Z_j`, itself following from
+`V_j := -i*gamma_j*gammabar_j = Z_j`), not search.
 
-Registered at exactly the odd sizes it can actually claim (`3,5,7,9,11,
-13,15` -- every even `L` gives `Lx=Ly=L` both even, hence case II/III),
-so `LEADERBOARD_ANCILLAS.md`'s square table has real gaps at even columns
-until some other submission fills them in -- same "a size-scoped
-submission just doesn't appear for sizes it doesn't claim" handling
-`render_ranked_table` already has everywhere else.
+#### Even-sided lattices: case III, and why the first cut wrongly refused them
+
+The first implementation rejected `Lx`, `Ly` both even, on the grounds that
+the odd face count `nF = (Lx-1)(Ly-1)` puts those sizes in the
+Supplementary Material's case II (even-parity subspace only) or case III
+(full Fock space *plus* an extra logical qubit), neither matching this
+harness's "exactly the full `M`-mode Fock space" contract. That was too
+conservative: **both of those cases are reachable from the same colouring,
+and case III is repairable using only what the paper already provides.**
+
+Which checkerboard class carries the face qubits is a free labelling
+choice. When `nF` is odd the two choices genuinely differ -- they're
+Table I's own "majority even faces" and "majority odd faces" columns:
+
+  * minority-odd -> case II, `m + floor(nF/2)` qubits, even-parity
+    subspace only. Unusable here, and not fixable by adding stabilizers.
+  * majority-odd -> case III, `m + ceil(nF/2)` qubits, `C^2 (x) F_m`.
+
+Case III is one logical qubit too big, and the paper says exactly how to
+remove it: of the four corner operators available there, "if one treats
+one of these operators as a stabilizer, then one restricts to the full
+fermionic code space without an extra logical qubit". Concretely, taking
+the anchor corner as `A_i = gamma~_i (x) 1`, the other three corners are
+`B_i, C_i, D_i = h~_i (x) X_bar/Y_bar/Z_bar`, and a product of two of
+*those* is a pure logical Pauli (`C_i D_i = i * 1 (x) X_bar` -- the hole
+operators square away). Being the identity on the fermionic factor, it
+commutes with every Majorana, so it is a legitimate extra stabilizer; it
+is also precisely the corner-to-corner string the paper describes as
+topologically protecting that logical qubit. Adding it brings the
+stabilizer count to `floor(nF/2) + 1 = ceil(nF/2) = n_ancillas`, so
+`codespace_dimension` lands on `2^M` exactly.
+
+**The bug that made this look impossible.** Flipping the colouring is not
+just a relabelling of which faces get qubits -- the arrows *circulate
+around the even faces*, so swapping which class is "even" reorients them.
+Redoing the comb-pattern derivation with the roles swapped: the horizontal
+rule is unchanged (both candidate faces of a horizontal edge give the same
+answer, and it depends only on row parity), but the **vertical rule
+reverses** (there the two candidate faces share a face-row, and column
+parity selects between them). Flipping the colouring without flipping the
+orientation leaves the lattice corners with mixed in/out arrows, so the
+corner-Majorana injection -- which requires all arrows at a corner to point
+the same way -- has nowhere to stand. That's exactly the error the harness
+reported ("corner (0, 0) has mixed edge directions"), and it's why the
+first attempt read as "these sizes can't be done".
+
+Independent confirmation the reconstruction is right: the case III qubit
+counts fall exactly on Table I's own "majority odd faces" formula
+`1.5L^2 - L + 1` -- 21, 49, 89, 141 at `L = 4, 6, 8, 10` -- which was not
+fitted to, it dropped out of the construction.
+
+DK is therefore registered across the full `3x3..15x15` sweep, no gaps.
 
 ### Hexagonal Derby-Klassen: investigated and not yet solved
 

@@ -3,16 +3,23 @@
     "module": "harness.v2.baselines.dk",
     "sizes": [
       3,
+      4,
       5,
+      6,
       7,
+      8,
       9,
+      10,
       11,
+      12,
       13,
+      14,
       15
     ],
     "label": "Derby-Klassen",
     "graph": "square",
     "has_represent": true,
-    "submitted_at": "2026-08-31T22:15:09+00:00"
+    "max_weight": 3,
+    "submitted_at": "2026-09-04T14:42:22+00:00"
   }
 }
