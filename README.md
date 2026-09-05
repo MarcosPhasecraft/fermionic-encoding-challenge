@@ -91,43 +91,100 @@ encodings beyond JW, parity basis, Bravyi-Kitaev, and ternary tree. See
 [`MEMORY.md`](MEMORY.md) for notes past submitters left on what they
 tried — unverified, but a real head start over starting from nothing.
 
-**Found something better? Open a pull request.**
+### Three challenges, one submission process
 
-Fork the repo, add one self-contained folder under `submissions/`, and open
-a PR:
+| challenge | target | leaderboard |
+|---|---|---|
+| **Square lattice** | `Lx × Ly` grids, `3×3`–`15×15` | [`LEADERBOARD.md`](LEADERBOARD.md) |
+| **Graph lattices** | hexagonal, triangular and their periodic variants, same metric | [`LEADERBOARD_GRAPHS.md`](LEADERBOARD_GRAPHS.md) |
+| **Ancilla/stabilizer** | fewest ancilla qubits at a capped Pauli weight — [details below](#the-ancillastabilizer-challenge) | [`LEADERBOARD_ANCILLAS.md`](LEADERBOARD_ANCILLAS.md) |
+
+All three take submissions the same way — see [How to submit](#how-to-submit).
+
+<a id="how-to-submit"></a>
+## How to submit
+
+Applies to **every** challenge on this page — square lattice, graph
+lattices, and the ancilla/stabilizer challenge. One field in
+`submission.json` picks which one you're entering; everything else about
+the process is identical.
+
+**1. Create exactly one folder** under `submissions/`:
 
 ```
-submissions/<your-name>/
-  encode.py         # def encode(spec) -> mapping; optional def order(Lx, Ly) -> perm
-  submission.json   # {"name": "...", "label": "...", "sizes": "3-15"}
-  memory/           # OPTIONAL -- notes on what you tried, welcome but not required
+submissions/<any-folder-name>/
+  encode.py         # def encode(spec) -> mapping
+                    #   + optional def order(Lx, Ly) -> perm
+                    #   + optional def represent(...)  [ancilla challenge only]
+  submission.json   # see below
+  memory/           # OPTIONAL -- notes on what you tried
+    whatever.md
 ```
 
-**Change nothing else** — a PR that mixes a submission with other edits is
-rejected automatically. That's the whole rule.
+The folder name doesn't matter — your identity comes from `name` in the
+manifest.
 
-CI then verifies your encoding at every size you claim and reports the
-scores on the PR, usually within minutes. You don't need to run anything
-locally, though you can check first with
-`scripts/submit_baseline.py --file ... --name ...` (see `CONTRIBUTING.md`)
-if you'd rather not iterate through CI.
+**2. Write `submission.json`.** A complete, working example:
 
-`submission.json`'s exact schema is in [`inbox/README.md`](inbox/README.md);
-the short version is `name` (a filesystem-safe identifier), `label` (what
-shows on the leaderboard), and `sizes` (which grids it claims to be valid
-for), all required. If you include a `memory/` folder of markdown notes on
-what worked and what didn't, it's carried into the accepted record and
-indexed in `MEMORY.md` for the next person to learn from — the same idea as
-ecdsa.fail's own shared memory notes.
+```json
+{
+  "name": "alice_ternary_v2",
+  "label": "Alice's Ternary Tree (annealed)",
+  "sizes": "3-15",
+  "generated_by": "Claude Opus 4.5"
+}
+```
 
-A maintainer merges once the check is green; a second, trusted workflow then
-recomputes the scores, registers the submission, and regenerates the
-leaderboard. Nothing you submit is published on the strength of the PR check
-alone.
+| field | required | notes |
+|---|---|---|
+| `name` | ✅ | Registry key and filename. Must match `^[a-z][a-z0-9_]*$` — lowercase, starts with a letter, only letters/digits/underscore. Must not already be registered. |
+| `label` | ✅ | What appears on the leaderboard. Keep it short and visually distinct — the tables get wide. |
+| `sizes` | ✅ | Which sizes you claim. Grammar depends on the challenge (below). **Every claimed size is checked; one failure rejects the whole submission.** |
+| `generated_by` | — | Free text: a model name, `"human"`, or omit. Recorded, never displayed. |
+| `graph` | — | Selects a lattice type. Omit for square. |
+| `challenge` | — | Set to `"ancillas"` for the ancilla/stabilizer challenge. |
+| `max_weight` | — | Ancilla challenge only; the weight cap you claim. Default `3`. |
 
-(Submissions can still be handed over as a folder and processed by hand with
-`python3 scripts/process_inbox.py` — same pipeline, same verification, just
-without the PR.)
+**Which challenge you're entering:**
+
+| challenge | manifest fields | `sizes` looks like |
+|---|---|---|
+| Square lattice | *(none needed)* | `"3-15"`, `"8"`, `"8,10,12"` |
+| Graph lattices | `"graph": "hexagonal"` (or `triangular`, `periodic_hexagonal`, `periodic_triangular`) | `"3x3,4x4,8x8"` — explicit pairs |
+| Ancilla/stabilizer | `"challenge": "ancillas"`, optional `"graph"`, optional `"max_weight"` | as per the `graph` you chose |
+
+**3. Open a pull request.** Three rules, all enforced automatically:
+
+- your PR must **only add files** — it may not modify, delete or rename
+  anything, including another participant's submission
+- everything must live in **one** `submissions/<folder>/`
+- **nothing outside that folder** may be touched
+
+CI then verifies your encoding at every size you claim and reports pass/fail
+on the PR, usually within minutes; the per-size scores are in the check log.
+
+**Checking locally first** (optional — this is the exact command CI runs, and
+it writes nothing):
+
+```bash
+mkdir -p inbox && cp -r submissions/<your-folder> inbox/
+python3 scripts/process_inbox.py --check-only
+```
+
+**What happens after.** A maintainer merges once the check is green; a
+second, trusted workflow then recomputes the scores, registers your
+submission, and regenerates the leaderboard. Nothing is published on the
+strength of the PR check alone. If you included `memory/` notes, they're
+carried into the permanent record and indexed in
+[`MEMORY.md`](MEMORY.md) for the next person — the same idea as ecdsa.fail's
+own shared memory notes.
+
+**No GitHub access?** Hand the folder over as-is and it can be processed by
+hand with `python3 scripts/process_inbox.py` — same pipeline, same
+verification, no PR.
+
+The full schema reference, including every field's exact validation rule, is
+in [`inbox/README.md`](inbox/README.md).
 
 ## How to play
 
@@ -325,6 +382,11 @@ before trusting its weight (see `harness/v2/score.py`); without it, the raw
 Majorana product is scored as-is. Full schema, the exact acceptance
 criteria, and how this reaches the leaderboard: see `inbox/README.md`'s own
 "Ancilla/stabilizer challenge" section.
+
+**To submit to this challenge**, follow [How to submit](#how-to-submit)
+above and set `"challenge": "ancillas"` in your manifest (plus
+`"max_weight"` if you're targeting a looser cap than 3). Everything else
+about the process is identical.
 
 `scripts/run_challenge.py` is this challenge's own local testing CLI (the
 analogue of `run.py evaluate` above):
