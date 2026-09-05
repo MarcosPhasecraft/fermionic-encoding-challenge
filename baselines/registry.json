@@ -539,5 +539,26 @@
     "label": "Adaptive Clifford and Majorana permutation (no ancillas)",
     "generated_by": "OpenAI Codex",
     "submitted_at": "2026-09-05T05:27:46+00:00"
+  },
+  "targeted_clifford_majorana_search": {
+    "module": "baselines.targeted_clifford_majorana_search",
+    "sizes": [
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ],
+    "label": "Targeted Clifford and adaptive Majorana search (no ancillas)",
+    "generated_by": "OpenAI Codex",
+    "submitted_at": "2026-09-05T06:05:09+00:00"
   }
 }
