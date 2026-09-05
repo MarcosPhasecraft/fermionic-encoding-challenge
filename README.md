@@ -256,7 +256,7 @@ size a submission claims, not just asserted.
 `3`), not something the challenge fixes for you — the interesting object
 here is the whole locality/ancilla trade-off curve, and pinning one cap
 would only ever show one point on it. Boards are currently rendered for
-**weight 3 and weight 4**; any other cap is still verified, scored, and
+**weight 3, 4 and 5**; any other cap is still verified, scored, and
 cached, just not displayed yet (one line in
 `scripts/update_leaderboard_ancillas.py` showcases a new one).
 

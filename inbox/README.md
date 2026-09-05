@@ -212,7 +212,7 @@ field existed keeps its exact meaning.
 
 Which caps get a *rendered board* is a separate, purely presentational
 decision — `ANCILLA_SHOWCASED_MAX_WEIGHTS` in
-`scripts/update_leaderboard_ancillas.py`, currently `[3, 4]`. A submission
+`scripts/update_leaderboard_ancillas.py`, currently `[3, 4, 5]`. A submission
 claiming any other cap is still verified, scored, and cached, it just isn't
 displayed yet; showcasing it later is a one-line change, no rescoring.
 

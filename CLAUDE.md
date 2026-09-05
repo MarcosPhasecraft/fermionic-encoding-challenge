@@ -260,7 +260,7 @@ it includes the weight-3 constructions.
 
 `ANCILLA_SHOWCASED_MAX_WEIGHTS` in
 `scripts/update_leaderboard_ancillas.py` is the single place deciding
-which caps get rendered (currently `[3, 4]`) — purely presentational, the
+which caps get rendered (currently `[3, 4, 5]`) — purely presentational, the
 same "always verified/scored/cached, shown only if showcased" split
 `is_showcased()` draws for shapes. The per-size score cache stores the
 achieved weight alongside `n_ancillas` for exactly this reason; a cache

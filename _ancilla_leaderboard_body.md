@@ -24,3 +24,15 @@ Best ancilla count reached so far at 15x15 under a max Pauli weight of 4, plotte
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | 1 | **2**<br>[Derby-Klassen](../harness/v2/baselines/dk.py) | **5**<br>[Derby-Klassen](../harness/v2/baselines/dk.py) | **8**<br>[Derby-Klassen](../harness/v2/baselines/dk.py) | **13**<br>[Derby-Klassen](../harness/v2/baselines/dk.py) | **18**<br>[Derby-Klassen](../harness/v2/baselines/dk.py) | **25**<br>[Derby-Klassen](../harness/v2/baselines/dk.py) | **32**<br>[Derby-Klassen](../harness/v2/baselines/dk.py) | **41**<br>[Derby-Klassen](../harness/v2/baselines/dk.py) | **50**<br>[Derby-Klassen](../harness/v2/baselines/dk.py) | **61**<br>[Derby-Klassen](../harness/v2/baselines/dk.py) | **72**<br>[Derby-Klassen](../harness/v2/baselines/dk.py) | **85**<br>[Derby-Klassen](../harness/v2/baselines/dk.py) | **98**<br>[Derby-Klassen](../harness/v2/baselines/dk.py) |
 
+## Square lattice — fewest ancillas at max weight ≤ 5
+
+![Fewest ancillas progress at max weight 5](../assets/progress_ancillas_square_w5.png?v=802791511153)
+
+Best ancilla count reached so far at 15x15 under a max Pauli weight of 5, plotted against submission date -- a new point only appears if it's a strict improvement on the prior record. The dotted line is Derby-Klassen's own ancilla count at this size (arXiv 2003.06939), the construction to beat on this board.
+
+`min n_ancillas subject to max_weight ≤ 5`
+
+| rank | 3×3 | 4×4 | 5×5 | 6×6 | 7×7 | 8×8 | 9×9 | 10×10 | 11×11 | 12×12 | 13×13 | 14×14 | 15×15 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | **2**<br>[Derby-Klassen](../harness/v2/baselines/dk.py) | **5**<br>[Derby-Klassen](../harness/v2/baselines/dk.py) | **8**<br>[Derby-Klassen](../harness/v2/baselines/dk.py) | **13**<br>[Derby-Klassen](../harness/v2/baselines/dk.py) | **18**<br>[Derby-Klassen](../harness/v2/baselines/dk.py) | **25**<br>[Derby-Klassen](../harness/v2/baselines/dk.py) | **32**<br>[Derby-Klassen](../harness/v2/baselines/dk.py) | **41**<br>[Derby-Klassen](../harness/v2/baselines/dk.py) | **50**<br>[Derby-Klassen](../harness/v2/baselines/dk.py) | **61**<br>[Derby-Klassen](../harness/v2/baselines/dk.py) | **72**<br>[Derby-Klassen](../harness/v2/baselines/dk.py) | **85**<br>[Derby-Klassen](../harness/v2/baselines/dk.py) | **98**<br>[Derby-Klassen](../harness/v2/baselines/dk.py) |
+

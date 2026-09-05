@@ -13,12 +13,12 @@ trade-off curve, and pinning one cap would only ever show one point on it.
 
 **Ranking is by ACHIEVED max weight, not claimed cap.** A submission is
 listed on every showcased track whose cap it actually satisfies, so an
-encoding reaching weight 3 everywhere appears on both the weight-3 and
-weight-4 boards (a tighter encoding trivially satisfies a looser cap), and
-one reaching weight 4 appears only on the weight-4 board. That's what
-makes the boards comparable: the weight-4 board answers "how few ancillas
-if you're allowed weight 4", and the honest answer includes every weight-3
-construction too.
+encoding reaching weight 3 everywhere appears on every board (a tighter
+encoding trivially satisfies a looser cap), while one reaching weight 4
+appears on the weight-4 and weight-5 boards but not the weight-3 one.
+That's what makes the boards comparable: the weight-N board answers "how
+few ancillas if you're allowed weight N", and the honest answer includes
+every tighter construction too.
 
 ANCILLA_SHOWCASED_MAX_WEIGHTS below is the single place deciding which
 caps get rendered. A submission may claim ANY positive cap; one outside
@@ -32,9 +32,10 @@ red DOTTED line (not the usual dashed reference-line style -- see
 scripts/progress_chart.py's linestyles parameter) since it doubles as both
 "the starting point" and "the published result" here, unlike the
 ancilla-free challenges' separate JW/paper-best lines. It anchors the
-weight-4 board as well as the weight-3 one: no published construction
-reaches weight 4 with fewer qubits than DK reaches weight 3 with, so
-beating it there is a genuinely open target rather than a formality.
+looser boards as well as the weight-3 one: no published construction
+reaches weight 4 or 5 with fewer qubits than DK reaches weight 3 with
+(see the DK paper's own Table I), so beating it there is a genuinely open
+target rather than a formality.
 Hexagonal is a valid submission target too (harness.v2.challenges/
 harness.graphs already support it) and is fully verified, scored, and
 cached exactly like square -- it's just not rendered in a table yet,
@@ -83,7 +84,7 @@ from harness.v2.loading import load_submission_extended
 # Which weight caps get a rendered table + chart. Any other cap a
 # submission claims is still verified/scored/cached, just not shown --
 # add a number here to showcase it, which is the whole change required.
-ANCILLA_SHOWCASED_MAX_WEIGHTS = [3, 4]
+ANCILLA_SHOWCASED_MAX_WEIGHTS = [3, 4, 5]
 
 # The reference baseline anchoring every track's chart, by registry name.
 REFERENCE_NAME = "dk"
