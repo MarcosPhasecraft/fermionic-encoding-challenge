@@ -36,28 +36,74 @@ jobs:
       - name: Work out what this PR changes
         id: scope
         run: |
+          # THREE dots: diff against the MERGE BASE, not against current main.
+          # With two dots, a fork made before main moved on would show every
+          # commit main has gained since as "changed files" and be rejected --
+          # a submitter would have to rebase just to be allowed to submit.
+          # Verified against a real PR from a base 5 commits behind: two-dot
+          # saw 27 files, three-dot saw the 2 the submitter actually added.
           BASE='${{ github.event.pull_request.base.sha }}'
-          CHANGED=$(git diff --name-only "$BASE"...HEAD)
-          echo "Files changed:"; echo "$CHANGED" | sed 's/^/  /'
+          STATUS=$(git diff --name-status "$BASE"...HEAD)
+          echo "Changes in this PR:"; echo "$STATUS" | sed 's/^/  /'
 
-          # A submission is anything added under submissions/, except the
-          # directory's own README.
-          SUBS=$(echo "$CHANGED" | { grep '^submissions/' || true; } | { grep -v '^submissions/README\.md$' || true; })
-          OTHER=$(echo "$CHANGED" | { grep -v '^submissions/' || true; })
-          OTHER="$OTHER$(echo "$CHANGED" | { grep '^submissions/README\.md$' || true; })"
+          BAD_KIND=""   # submission paths changed by something other than an add
+          DIRS=""       # distinct submissions/<name>/ directories touched
+          OTHER=""      # anything at all outside a submission folder
 
-          if [ -n "$SUBS" ] && [ -n "$OTHER" ]; then
-            echo "::error::A submission PR must only add files under submissions/<name>/."
-            echo "::error::This PR also changes:"; echo "$OTHER" | sed 's/^/  /'
-            exit 1
-          fi
+          while IFS=$'\t' read -r ST P1 P2; do
+            [ -z "$ST" ] && continue
+            # A rename reports two paths; both count as touched.
+            for P in "$P1" "$P2"; do
+              [ -z "$P" ] && continue
+              case "$P" in
+                submissions/README.md)
+                  OTHER="$OTHER $P" ;;
+                submissions/*)
+                  case "$ST" in
+                    A) DIRS="$DIRS $(echo "$P" | cut -d/ -f1,2)" ;;
+                    *) BAD_KIND="$BAD_KIND $ST:$P" ;;
+                  esac ;;
+                *)
+                  OTHER="$OTHER $P" ;;
+              esac
+            done
+          done <<< "$STATUS"
 
-          if [ -z "$SUBS" ]; then
+          UNIQUE_DIRS=$(echo $DIRS | tr ' ' '\n' | { grep -v '^$' || true; } | sort -u)
+          N_DIRS=$(echo "$UNIQUE_DIRS" | { grep -c . || true; })
+
+          if [ -z "$DIRS" ] && [ -z "$BAD_KIND" ]; then
             echo "No submission in this PR -- nothing to verify."
             echo "has_submission=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "has_submission=true" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
+
+          # From here on this IS a submission PR, so the rules bite.
+          FAILED=0
+
+          if [ -n "$OTHER" ]; then
+            echo "::error::A submission PR must touch nothing outside its own submissions/<name>/ folder."
+            echo "::error::Also changed:$OTHER"
+            FAILED=1
+          fi
+
+          if [ -n "$BAD_KIND" ]; then
+            echo "::error::A submission PR may only ADD files. These modify, delete or rename existing ones:"
+            echo "::error::$BAD_KIND"
+            echo "::error::(In particular, you cannot alter someone else's submission.)"
+            FAILED=1
+          fi
+
+          if [ "$N_DIRS" -gt 1 ]; then
+            echo "::error::One submission per pull request. This PR adds $N_DIRS:"
+            echo "$UNIQUE_DIRS" | sed 's/^/  /'
+            FAILED=1
+          fi
+
+          [ "$FAILED" -eq 1 ] && exit 1
+
+          echo "Submission folder: $UNIQUE_DIRS"
+          echo "has_submission=true" >> "$GITHUB_OUTPUT"
 
       - uses: actions/setup-python@v5
         if: steps.scope.outputs.has_submission == 'true'
