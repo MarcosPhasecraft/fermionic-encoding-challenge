@@ -1,0 +1,80 @@
+# Verifies a submission opened as a pull request, and enforces that a
+# submission PR touches nothing but its own folder.
+#
+# SECURITY: this job executes the submitter's arbitrary Python (that is the
+# whole point -- encode() has to run to be verified). It therefore uses the
+# `pull_request` trigger, which for a fork PR gets a READ-ONLY token and no
+# access to secrets. Do NOT switch this to `pull_request_target`: that
+# trigger runs with write access and secrets, and combining it with checking
+# out and running PR code is the well-known GitHub privilege-escalation
+# footgun. Nothing here needs to write, and it must stay that way.
+#
+# Registration (writing to the registry, regenerating leaderboards, pushing)
+# happens in register-submission.yml, which runs only AFTER a maintainer has
+# merged, on trusted content.
+name: Verify submission
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    # A submission's encode() may legitimately do real work (a search, an
+    # ensemble of restarts) -- one accepted submission took ~25 min of CPU.
+    # Generous, but bounded so a runaway can't burn a runner indefinitely.
+    timeout-minutes: 90
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # need the base commit to diff against
+
+      - name: Work out what this PR changes
+        id: scope
+        run: |
+          BASE='${{ github.event.pull_request.base.sha }}'
+          CHANGED=$(git diff --name-only "$BASE"...HEAD)
+          echo "Files changed:"; echo "$CHANGED" | sed 's/^/  /'
+
+          # A submission is anything added under submissions/, except the
+          # directory's own README.
+          SUBS=$(echo "$CHANGED" | { grep '^submissions/' || true; } | { grep -v '^submissions/README\.md$' || true; })
+          OTHER=$(echo "$CHANGED" | { grep -v '^submissions/' || true; })
+          OTHER="$OTHER$(echo "$CHANGED" | { grep '^submissions/README\.md$' || true; })"
+
+          if [ -n "$SUBS" ] && [ -n "$OTHER" ]; then
+            echo "::error::A submission PR must only add files under submissions/<name>/."
+            echo "::error::This PR also changes:"; echo "$OTHER" | sed 's/^/  /'
+            exit 1
+          fi
+
+          if [ -z "$SUBS" ]; then
+            echo "No submission in this PR -- nothing to verify."
+            echo "has_submission=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_submission=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-python@v5
+        if: steps.scope.outputs.has_submission == 'true'
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        if: steps.scope.outputs.has_submission == 'true'
+        run: pip install -r requirements.txt
+
+      - name: Verify
+        if: steps.scope.outputs.has_submission == 'true'
+        run: |
+          # inbox/ is git-ignored (local working state), so a PR can't put a
+          # folder there directly -- it stages under submissions/ instead and
+          # we hand it to the ordinary pipeline here. Same verification path
+          # as a manually-handled submission, no weaker second implementation.
+          mkdir -p inbox
+          cp -r submissions/*/ inbox/ 2>/dev/null || true
+          python3 scripts/process_inbox.py --check-only

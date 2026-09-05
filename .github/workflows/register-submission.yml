@@ -1,0 +1,93 @@
+# Registers a submission after a maintainer has merged its pull request.
+#
+# This is the privileged half of the split (see verify-submission.yml for the
+# unprivileged half): it needs write access to commit the registry entry and
+# the regenerated leaderboards. It runs on `push` to main, i.e. only on
+# content a maintainer has already reviewed and merged -- never on an open
+# PR's contents.
+#
+# The scores that land on the leaderboard are computed HERE, by this trusted
+# run, and never taken from the pull-request check. That check tells the
+# submitter whether their work passes; it is not a source of published
+# numbers.
+#
+# Note this workflow's own push does not re-trigger it: pushes made with
+# GITHUB_TOKEN deliberately do not start new workflow runs, which is what
+# stops the "regeneration commits touch submissions/, which re-runs
+# registration" loop.
+name: Register submission
+
+on:
+  push:
+    branches: [main]
+    paths: ['submissions/**']
+
+permissions:
+  contents: write
+
+jobs:
+  register:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Collect pending submissions
+        id: pending
+        run: |
+          shopt -s nullglob
+          DIRS=(submissions/*/)
+          if [ ${#DIRS[@]} -eq 0 ]; then
+            echo "Nothing staged under submissions/ -- nothing to register."
+            echo "any=false" >> "$GITHUB_OUTPUT"
+          else
+            printf 'Staged: %s\n' "${DIRS[@]}"
+            echo "any=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Register, regenerate leaderboards
+        if: steps.pending.outputs.any == 'true'
+        run: |
+          mkdir -p inbox
+          cp -r submissions/*/ inbox/
+          # Full pipeline: validate, verify at every claimed size, register,
+          # archive, regenerate whichever leaderboards actually changed.
+          # --non-interactive leaves the result uncommitted for the step below;
+          # --skip-tests because the suite runs as its own step, so a failure
+          # shows up as a distinct red step rather than a buried warning.
+          python3 scripts/process_inbox.py --non-interactive --skip-tests
+
+      - name: Run the test suite
+        if: steps.pending.outputs.any == 'true'
+        run: python3 -m pytest -q
+
+      - name: Commit the registration
+        if: steps.pending.outputs.any == 'true'
+        run: |
+          # The staged folders have been consumed -- process_inbox archived
+          # them into inbox/_processed/ (git-ignored), and the durable record
+          # is now baselines/<name>.py plus the registry entry.
+          git rm -r --quiet submissions/*/ || true
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+
+          if git diff --cached --quiet; then
+            echo "Nothing to commit -- submission was rejected, leaving it staged for a fix."
+            exit 1
+          fi
+
+          git commit -m "Register submission(s) via CI
+
+          Verified and registered by .github/workflows/register-submission.yml.
+          Scores computed by this run, not taken from the pull-request check."
+          git push

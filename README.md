@@ -91,35 +91,43 @@ encodings beyond JW, parity basis, Bravyi-Kitaev, and ternary tree. See
 [`MEMORY.md`](MEMORY.md) for notes past submitters left on what they
 tried — unverified, but a real head start over starting from nothing.
 
-**Found something better?**
+**Found something better? Open a pull request.**
 
-Package it as one self-contained folder:
+Fork the repo, add one self-contained folder under `submissions/`, and open
+a PR:
 
 ```
-<any-folder-name>/
+submissions/<your-name>/
   encode.py         # def encode(spec) -> mapping; optional def order(Lx, Ly) -> perm
   submission.json   # {"name": "...", "label": "...", "sizes": "3-15"}
   memory/           # OPTIONAL -- notes on what you tried, welcome but not required
 ```
 
-and hand that whole folder — as one unit, not just the `.py` file — to
-whoever maintains this repo. `submission.json`'s exact schema is in
-`inbox/README.md`; the short version is `name` (a filesystem-safe
-identifier), `label` (what shows on the leaderboard), and `sizes` (which
-grids it claims to be valid for), all required. If you include a `memory/`
-folder of markdown notes on what worked and what didn't, it's carried
-into the accepted record and indexed in `MEMORY.md` for the next person
-to learn from — the same idea as ecdsa.fail's own shared memory notes.
+**Change nothing else** — a PR that mixes a submission with other edits is
+rejected automatically. That's the whole rule.
 
-On their end, registering it is one command —
-`python3 scripts/process_inbox.py`, run after dropping your folder into
-`inbox/` — which validates the manifest and the file, runs `verify()` at
-every size claimed, and only if everything passes registers it,
-regenerates `LEADERBOARD.md`, and re-runs the test suite. No manual flags,
-no case-by-case judgment calls. (A single ad hoc file can still be tested
-by hand with `scripts/submit_baseline.py --file ... --name ...` — see
-`CONTRIBUTING.md` — useful for trying your own idea locally before
-sending it over.)
+CI then verifies your encoding at every size you claim and reports the
+scores on the PR, usually within minutes. You don't need to run anything
+locally, though you can check first with
+`scripts/submit_baseline.py --file ... --name ...` (see `CONTRIBUTING.md`)
+if you'd rather not iterate through CI.
+
+`submission.json`'s exact schema is in [`inbox/README.md`](inbox/README.md);
+the short version is `name` (a filesystem-safe identifier), `label` (what
+shows on the leaderboard), and `sizes` (which grids it claims to be valid
+for), all required. If you include a `memory/` folder of markdown notes on
+what worked and what didn't, it's carried into the accepted record and
+indexed in `MEMORY.md` for the next person to learn from — the same idea as
+ecdsa.fail's own shared memory notes.
+
+A maintainer merges once the check is green; a second, trusted workflow then
+recomputes the scores, registers the submission, and regenerates the
+leaderboard. Nothing you submit is published on the strength of the PR check
+alone.
+
+(Submissions can still be handed over as a folder and processed by hand with
+`python3 scripts/process_inbox.py` — same pipeline, same verification, just
+without the PR.)
 
 ## How to play
 

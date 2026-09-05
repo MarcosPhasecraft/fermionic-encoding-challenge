@@ -1,0 +1,5 @@
+# Everything needs a maintainer review. Combined with branch protection on
+# main, this is what keeps a submission PR from merging anything but its own
+# folder: the verify-submission workflow blocks a PR that mixes a submission
+# with other changes, and this makes sure a human sees whatever does land.
+* @MarcosPhasecraft

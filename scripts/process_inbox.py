@@ -179,9 +179,16 @@ def _pending_submission_dirs() -> list[Path]:
     )
 
 
-def _process_one(folder: Path, registry: dict) -> dict:
+def _process_one(folder: Path, registry: dict, check_only: bool = False) -> dict:
     """Returns {"name": ..., "accepted": bool, "reason"/"scores": ...}.
-    Raises nothing -- every failure mode is caught and reported."""
+    Raises nothing -- every failure mode is caught and reported.
+
+    check_only stops right after verification: the submission is validated
+    and scored exactly as normal, but NOTHING is written -- no file copied
+    into baselines/, no registry entry, no cache pre-warm, no archive move.
+    That is the mode the pull-request CI runs, where the submitted code is
+    untrusted and the job has a read-only token anyway.
+    """
     try:
         manifest_path = folder / "submission.json"
         encode_path = folder / "encode.py"
@@ -227,6 +234,12 @@ def _process_one(folder: Path, registry: dict) -> dict:
             scores[key] = {"total": total, "max": max_weight}
             print(f"  {lx}x{ly}: total={total} max={max_weight}", flush=True)
 
+        if check_only:
+            return {"name": name, "label": manifest["label"], "accepted": True,
+                    "scores": scores, "submitted_at": None,
+                    "generated_by": manifest.get("generated_by"), "has_memory": False,
+                    "check_only": True}
+
         dest = submission_lib.BASELINES_DIR / f"{name}.py"
         shutil.copy(encode_path, dest)
 
@@ -267,7 +280,7 @@ def _process_one(folder: Path, registry: dict) -> dict:
         return {"name": folder.name, "accepted": False, "reason": f"{type(e).__name__}: {e}"}
 
 
-def _process_one_ancilla(folder: Path, ancilla_registry: dict) -> dict:
+def _process_one_ancilla(folder: Path, ancilla_registry: dict, check_only: bool = False) -> dict:
     """_process_one()'s analogue for a "challenge": "ancillas" submission
     (see inbox/README.md) -- same shape and same never-raises contract, but
     dispatches through harness.v2 (load_submission_extended,
@@ -313,6 +326,12 @@ def _process_one_ancilla(folder: Path, ancilla_registry: dict) -> dict:
             key = s if isinstance(s, int) else f"{lx}x{ly}"
             scores[key] = {"n_ancillas": n_ancillas, "max_weight": max_weight, "total_weight": total_weight}
             print(f"  {lx}x{ly}: n_ancillas={n_ancillas} max_weight={max_weight}", flush=True)
+
+        if check_only:
+            return {"name": name, "label": manifest["label"], "accepted": True, "challenge": "ancillas",
+                    "scores": scores, "submitted_at": None,
+                    "generated_by": manifest.get("generated_by"), "has_memory": False,
+                    "check_only": True}
 
         dest = submission_lib.ANCILLA_BASELINES_DIR / f"{name}.py"
         shutil.copy(encode_path, dest)
@@ -369,7 +388,7 @@ def _print_summary(results: list[dict]) -> None:
         print(f"\n[REJECTED] {r['name']!r}: {r['reason']}")
 
 
-def _dispatch(folder: Path, registry: dict, ancilla_registry: dict) -> dict:
+def _dispatch(folder: Path, registry: dict, ancilla_registry: dict, check_only: bool = False) -> dict:
     """Peeks submission.json's "challenge" field (default "weight", the
     ancilla-free challenges) to decide which pipeline processes this
     folder -- before any real validation, so a malformed/missing manifest
@@ -384,14 +403,24 @@ def _dispatch(folder: Path, registry: dict, ancilla_registry: dict) -> dict:
         except json.JSONDecodeError:
             pass  # let _process_one's own JSON-parse error reporting handle it
     if challenge == "ancillas":
-        return _process_one_ancilla(folder, ancilla_registry)
-    return _process_one(folder, registry)
+        return _process_one_ancilla(folder, ancilla_registry, check_only)
+    return _process_one(folder, registry, check_only)
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--skip-tests", action="store_true", help="skip the post-acceptance pytest run (faster; used by this project's own test suite)")
     parser.add_argument("--skip-leaderboard", action="store_true", help="skip regenerating LEADERBOARD.md (faster dry runs; used by this project's own test suite)")
+    parser.add_argument(
+        "--check-only", action="store_true",
+        help="validate and verify every pending submission, print the scores, WRITE NOTHING, "
+             "and exit non-zero if any failed -- what the pull-request CI runs",
+    )
+    parser.add_argument(
+        "--non-interactive", action="store_true",
+        help="never prompt about git; leave any changes uncommitted for the caller to handle "
+             "(used by the post-merge registration workflow, which commits them itself)",
+    )
     args = parser.parse_args()
 
     pending = _pending_submission_dirs()
@@ -402,10 +431,20 @@ def main():
 
     registry = load_registry()
     ancilla_registry = submission_lib.load_ancilla_registry()
-    results = [_dispatch(folder, registry, ancilla_registry) for folder in pending]
+    results = [_dispatch(folder, registry, ancilla_registry, args.check_only) for folder in pending]
     _print_summary(results)
 
     accepted = [r for r in results if r["accepted"]]
+
+    if args.check_only:
+        # Nothing was written; the exit code IS the result, so CI can gate on it.
+        rejected = [r for r in results if not r["accepted"]]
+        if rejected:
+            print(f"\n{len(rejected)} submission(s) failed verification -- see reasons above.")
+            sys.exit(1)
+        print(f"\n{len(accepted)} submission(s) passed verification. Nothing was written (--check-only).")
+        return
+
     if not accepted:
         return
 
@@ -430,6 +469,10 @@ def main():
     print("\nFiles touched this run:")
     for f in touched:
         print(f"  {f}")
+
+    if args.non_interactive:
+        print("\nLeaving changes uncommitted (--non-interactive).")
+        return
 
     answer = input("\nPush to GitHub, commit locally only, or do neither? [push/commit/none]: ").strip().lower()
     if answer not in ("push", "commit"):

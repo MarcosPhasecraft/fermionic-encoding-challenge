@@ -12,6 +12,8 @@ leaderboard regen.
 
 import json
 
+import pytest
+
 import scripts.process_inbox as process_inbox
 import scripts.submission_lib as submission_lib
 
@@ -283,3 +285,64 @@ def test_accepted_submission_prewarms_the_cache_end_to_end(tmp_path, monkeypatch
     entry = cache["entries"]["pytest_smoke_prewarm"]
     assert entry["fingerprint"] == submission_lib.hash_file(baselines_dir / "pytest_smoke_prewarm.py")
     assert entry["scores"]["3"] == {"total": 201, "max": 4}  # JW at 3x3, from the baselines.jw re-export
+
+
+# ---- --check-only (what the pull-request CI runs) ----------------------------
+
+def test_check_only_verifies_without_writing_anything(tmp_path, monkeypatch, capsys):
+    # The mode the untrusted PR job runs in: it must validate and score
+    # exactly as normal, but leave no trace -- no baselines file, no registry
+    # entry, no archive move.
+    baselines_dir, registry_path, inbox_dir = _isolate(tmp_path, monkeypatch)
+    monkeypatch.setattr("sys.argv", ["process_inbox.py", "--check-only"])
+    _write_submission(inbox_dir, "alice", "alice_jw", "Alice's JW")
+
+    process_inbox.main()
+
+    assert json.loads(registry_path.read_text()) == {}
+    assert not (baselines_dir / "alice_jw.py").exists()
+    assert (inbox_dir / "alice").exists()  # not archived
+    assert "passed verification" in capsys.readouterr().out
+
+
+def test_check_only_exits_nonzero_when_a_submission_fails(tmp_path, monkeypatch):
+    _, registry_path, inbox_dir = _isolate(tmp_path, monkeypatch)
+    monkeypatch.setattr("sys.argv", ["process_inbox.py", "--check-only"])
+    broken = (
+        "def encode(spec):\n"
+        "    m = spec['M']\n"
+        "    return {'n_qubits': m, 'majoranas': ['X' * m] * (2 * m), 'stabilizers': []}\n"
+    )
+    _write_submission(inbox_dir, "bob", "bob_broken", "Bob's Broken", encode_source=broken)
+
+    with pytest.raises(SystemExit) as exc:
+        process_inbox.main()
+    assert exc.value.code == 1
+    assert json.loads(registry_path.read_text()) == {}
+
+
+def test_check_only_on_an_empty_inbox_is_a_no_op(tmp_path, monkeypatch):
+    _isolate(tmp_path, monkeypatch)
+    monkeypatch.setattr("sys.argv", ["process_inbox.py", "--check-only"])
+    process_inbox.main()  # must not raise
+
+
+def test_non_interactive_registers_but_never_prompts(tmp_path, monkeypatch):
+    # What the post-merge registration workflow runs: full registration, no
+    # git prompt (the workflow commits the result itself).
+    baselines_dir, registry_path, inbox_dir = _isolate(tmp_path, monkeypatch)
+    monkeypatch.setattr(
+        "sys.argv",
+        ["process_inbox.py", "--non-interactive", "--skip-tests", "--skip-leaderboard"],
+    )
+
+    def _no_prompt(_):
+        raise AssertionError("--non-interactive must never call input()")
+
+    monkeypatch.setattr("builtins.input", _no_prompt)
+    _write_submission(inbox_dir, "alice", "alice_jw", "Alice's JW")
+
+    process_inbox.main()
+
+    assert "alice_jw" in json.loads(registry_path.read_text())
+    assert (baselines_dir / "alice_jw.py").is_file()

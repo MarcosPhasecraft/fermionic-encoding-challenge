@@ -1,7 +1,17 @@
 # Submission inbox
 
-Ask whoever's submitting to hand you the **whole folder, already built**,
-in this exact shape:
+> **Two ways in.** Participants can now submit directly by pull request --
+> they add their folder under `submissions/` and CI verifies it, with no
+> manual step from you (see the repo README's "Found something better?"
+> and `.github/workflows/`). This file documents the **manual** path, and
+> is also the schema reference both paths share: the manifest format, the
+> `encode.py` contract and the challenge-selection fields below apply
+> identically either way. A PR submission is moved into `inbox/` and run
+> through this exact same pipeline after merge -- there is no separate,
+> weaker check for it.
+
+For the manual path, ask whoever's submitting to hand you the **whole
+folder, already built**, in this exact shape:
 
 ```
 <any-folder-name>/
