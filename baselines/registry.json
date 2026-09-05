@@ -518,5 +518,26 @@
     "label": "Geo Ternary (mixed data-driven anneal)",
     "generated_by": "Claude Sonnet 5",
     "submitted_at": "2026-09-04T16:29:40+00:00"
+  },
+  "adaptive_clifford_majorana_permutation": {
+    "module": "baselines.adaptive_clifford_majorana_permutation",
+    "sizes": [
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ],
+    "label": "Adaptive Clifford and Majorana permutation (no ancillas)",
+    "generated_by": "OpenAI Codex",
+    "submitted_at": "2026-09-05T05:27:46+00:00"
   }
 }
